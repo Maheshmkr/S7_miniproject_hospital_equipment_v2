@@ -1,0 +1,22 @@
+import { MongoMemoryServer } from "mongodb-memory-server";
+const mem = await MongoMemoryServer.create();
+process.env.MONGODB_URI = mem.getUri("hospital_equipment");
+process.env.JWT_SECRET = "test-only-secret";
+process.env.PORT = "5099";
+const { default: app } = await import("./server.js");
+await new Promise((r) => setTimeout(r, 3000));
+const B = "http://localhost:5099";
+const j = async (p, o) => { const r = await fetch(B + p, o); return [r.status, await r.json()]; };
+console.log("health", ...await j("/api/health"));
+const [rs, rb] = await j("/api/auth/register", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ name:"Test Admin", email:"admin@test.io", password:"medixa123", role:"ADMINISTRATOR" })});
+console.log("register", rs, rb.success, rb.data?.user?.role, "passwordHash leaked:", JSON.stringify(rb).includes("passwordHash"));
+const token = rb.data?.token;
+console.log("login ok", ...await j("/api/auth/login", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({email:"admin@test.io",password:"medixa123"})}).then(([s,b])=>[s,b.success]));
+console.log("login bad", ...await j("/api/auth/login", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({email:"admin@test.io",password:"wrong"})}).then(([s,b])=>[s,b.message]));
+console.log("me", ...await j("/api/auth/me", { headers: { Authorization: "Bearer " + token }}).then(([s,b])=>[s,b.data?.user?.email]));
+console.log("me no token", ...await j("/api/auth/me").then(([s,b])=>[s,b.message]));
+// role check: create staff user, hit admin-only /api/users
+const [, sb] = await j("/api/auth/register", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({name:"Staff One",email:"staff@test.io",password:"medixa123",role:"DEPARTMENT_STAFF"})});
+console.log("admin /api/users as admin", ...await j("/api/users", { headers:{Authorization:"Bearer "+token}}).then(([s,b])=>[s,b.success]));
+console.log("admin /api/users as staff", ...await j("/api/users", { headers:{Authorization:"Bearer "+sb.data.token}}).then(([s,b])=>[s,b.message]));
+process.exit(0);

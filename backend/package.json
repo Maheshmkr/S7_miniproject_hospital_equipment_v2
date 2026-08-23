@@ -1,0 +1,29 @@
+{
+  "name": "medixa-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Express + Mongoose REST API for the Medixa hospital equipment lifecycle platform",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "seed": "node seed/seed.js",
+    "test": "node auth-test.mjs && node user-dept-test.mjs && node equipment-test.mjs && node complaint-test.mjs && node vendor-test.mjs && node warranty-test.mjs && node calibration-test.mjs && node po-test.mjs && node inventory-test.mjs && node workflow-e2e-test.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.1",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^11.2.0",
+    "nodemon": "^3.1.4"
+  }
+}

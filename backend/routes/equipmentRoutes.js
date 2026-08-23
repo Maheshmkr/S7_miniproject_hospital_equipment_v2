@@ -1,0 +1,22 @@
+import { Router } from "express";
+import * as c from "../controllers/equipmentController.js";
+import { requireAuth } from "../middleware/authMiddleware.js";
+import { requireRole } from "../middleware/roleMiddleware.js";
+
+const router = Router();
+router.use(requireAuth);
+router.get("/", c.listEquipment);
+router.get("/:id", c.getEquipment);
+router.get("/:id/history", c.equipmentHistory);
+router.get("/:id/complaints", c.equipmentComplaints);
+router.get("/:id/maintenance", c.equipmentMaintenance);
+router.get("/:id/service-reports", c.equipmentServiceReports);
+router.get("/:id/audit", c.equipmentAudit);
+router.get("/:equipmentId/checklist", c.equipmentChecklist);
+router.get("/:equipmentId/warranty", c.equipmentWarranty);
+router.post("/", requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"), c.createEquipment);
+router.put("/:id", requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"), c.updateEquipment);
+router.patch("/:id/status", requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"), c.updateEquipmentStatus);
+router.patch("/:id/lifecycle", requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"), c.updateEquipmentLifecycle);
+router.delete("/:id", requireRole("ADMINISTRATOR"), c.deleteEquipment);
+export default router;
