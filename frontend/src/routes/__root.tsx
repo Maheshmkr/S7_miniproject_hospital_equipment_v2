@@ -9,7 +9,8 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -42,32 +43,78 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const [showDetails, setShowDetails] = useState(false);
+
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
+      <div className="w-full max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-float transition-all md:p-8">
+        <div className="flex flex-col items-center text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive animate-pulse">
+            <AlertTriangle className="h-6 w-6" />
+          </div>
+          <h1 className="mt-4 text-xl font-bold tracking-tight text-foreground md:text-2xl">
+            This page didn't load
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Something went wrong on our end. You can try refreshing or head back home.
+          </p>
+        </div>
+
+        <div className="mt-6 rounded-xl border border-destructive/15 bg-destructive/5 p-4 text-left">
+          <div className="flex items-start gap-2.5">
+            <div className="mt-0.5 rounded-md bg-destructive/15 px-1.5 py-0.5 text-xs font-semibold text-destructive">
+              Error
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold leading-relaxed text-foreground">
+                {error.name || "Error"}: {error.message || "An unexpected error occurred"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              {showDetails ? (
+                <>
+                  Hide technical details
+                  <ChevronDown className="h-3 w-3" />
+                </>
+              ) : (
+                <>
+                  Show technical details
+                  <ChevronRight className="h-3 w-3" />
+                </>
+              )}
+            </button>
+
+            {showDetails && (
+              <pre className="mt-3 max-h-60 overflow-auto rounded-lg bg-black/5 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground dark:bg-black/40 border border-border/50">
+                {error.stack || "No stack trace available"}
+              </pre>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:bg-primary/95 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
           >
             Try again
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            className="inline-flex items-center justify-center rounded-xl border border-input bg-background px-5 py-2.5 text-sm font-semibold text-foreground shadow-xs transition-all hover:bg-accent hover:-translate-y-0.5 active:translate-y-0"
           >
             Go home
           </a>

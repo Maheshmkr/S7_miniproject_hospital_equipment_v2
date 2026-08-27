@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import * as c from "../controllers/reportController.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { requireRole } from "../middleware/roleMiddleware.js";
@@ -34,8 +34,21 @@ analyticsRouter.get("/maintenance", c.maintenanceAnalytics);
 analyticsRouter.get("/departments", c.departmentAnalytics);
 analyticsRouter.get("/warranty", c.warrantyAnalytics);
 analyticsRouter.get("/audit", c.auditAnalytics);
+analyticsRouter.get("/audits", c.auditAnalytics);
 analyticsRouter.get("/inventory", c.inventoryAnalytics);
 analyticsRouter.get("/vendors", c.vendorAnalytics);
 analyticsRouter.get("/purchase-orders", c.purchaseOrderAnalytics);
+
+/* New Analytics Endpoints */
+analyticsRouter.get("/work-orders", c.workOrderAnalytics);
+analyticsRouter.get("/calibration", c.calibrationAnalytics);
+analyticsRouter.get("/preventive-maintenance", c.preventiveAnalytics);
+analyticsRouter.get("/trends", c.trendsAnalytics);
+analyticsRouter.get("/distributions", c.distributionsAnalytics);
+analyticsRouter.get("/comparative-performance", c.comparativePerformance);
+analyticsRouter.get("/costs", c.costsAnalytics);
+analyticsRouter.get("/compliance", c.complianceAnalytics);
+analyticsRouter.get("/availability", c.availabilityAnalytics);
+analyticsRouter.get("/breakdowns", c.breakdownsAnalytics);
 
 export default reportRouter;

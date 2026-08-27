@@ -43,6 +43,17 @@ import {
   Ring,
   EmptyState,
 } from "@/components/ui/primitives";
+import { apiEnabled } from "@/lib/api/client";
+import { useModuleAnalytics } from "@/lib/api/useAnalytics";
+import { useEquipmentList } from "@/lib/api/useEquipment";
+import { useComplaintList } from "@/lib/api/useComplaints";
+import { useMaintenanceList } from "@/lib/api/useMaintenance";
+import { useWarrantyList } from "@/lib/api/useWarranty";
+import { useInventoryList } from "@/lib/api/useInventory";
+import { usePurchaseOrderList } from "@/lib/api/usePurchaseOrders";
+import { useVendorList } from "@/lib/api/useVendors";
+import { useDepartmentList } from "@/lib/api/useDepartments";
+import { useUserList } from "@/lib/api/useUsers";
 import { cn } from "@/lib/utils";
 import {
   findRecord,
@@ -131,11 +142,12 @@ export function WorkflowTabs({ moduleKey, active }: { moduleKey: ModuleKey; acti
   );
 }
 
-function StatCards({ moduleKey }: { moduleKey: ModuleKey }) {
+function StatCards({ moduleKey, stats }: { moduleKey: ModuleKey; stats?: { label: string; value: string; delta: string }[] }) {
   const m = getModule(moduleKey);
+  const displayStats = stats ?? m.stats;
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {m.stats.map((s) => (
+      {displayStats.map((s) => (
         <Link key={s.label} to={`${m.base}/analytics` as never} className="block">
           <Panel className="h-full">
             <div className="p-6">
@@ -1058,7 +1070,39 @@ export function ModuleHistory({ moduleKey, id }: { moduleKey: ModuleKey; id: str
 
 export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
   const m = getModule(moduleKey);
-  const top = [...m.records].sort((a, b) => b.score - a.score).slice(0, 5);
+  
+  // Call register list hooks to fetch live records for comparative charts and top performers
+  const eqList = useEquipmentList({ limit: 100 });
+  const compList = useComplaintList({ limit: 100 });
+  const maintList = useMaintenanceList({ limit: 100 });
+  const warrList = useWarrantyList({ limit: 100 });
+  const invList = useInventoryList({ limit: 100 });
+  const poList = usePurchaseOrderList({ limit: 100 });
+  const vendList = useVendorList({ limit: 100 });
+  const deptList = useDepartmentList();
+  const usrList = useUserList();
+  
+  const liveRecords = (() => {
+    if (!apiEnabled) return null;
+    if (moduleKey === "equipment") return eqList.records;
+    if (moduleKey === "complaints") return compList.records;
+    if (moduleKey === "maintenance") return maintList.records;
+    if (moduleKey === "warranty") return warrList.records;
+    if (moduleKey === "inventory") return invList.records;
+    if (moduleKey === "purchase-orders") return poList.records;
+    if (moduleKey === "vendors") return vendList.records;
+    if (moduleKey === "departments") return deptList.records;
+    if (moduleKey === "users") return usrList.records;
+    return null;
+  })();
+
+  const activeRecords = apiEnabled && liveRecords ? liveRecords : m.records;
+  const activeTop = [...activeRecords].sort((a, b) => b.score - a.score).slice(0, 5);
+
+  // Fetch live stats & distribution breakdowns
+  const { mappedData, loading } = useModuleAnalytics(moduleKey);
+  const activeStats = apiEnabled && mappedData?.stats ? mappedData.stats : m.stats;
+  const activeBreakdown = apiEnabled && mappedData?.breakdown ? mappedData.breakdown : m.breakdown;
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
@@ -1078,7 +1122,7 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
         }
       />
       <WorkflowTabs moduleKey={moduleKey} active="analytics" />
-      <StatCards moduleKey={moduleKey} />
+      <StatCards moduleKey={moduleKey} stats={activeStats} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Panel className="lg:col-span-2">
@@ -1154,7 +1198,7 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={m.breakdown}
+                  data={activeBreakdown}
                   dataKey="value"
                   nameKey="name"
                   innerRadius={52}
@@ -1186,7 +1230,7 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
           />
           <div className="h-[260px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={m.records.map((r) => ({ name: r.id, score: r.score }))} barGap={6}>
+              <BarChart data={activeRecords.map((r) => ({ name: r.id, score: r.score }))} barGap={6}>
                 <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="name"
@@ -1223,7 +1267,7 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
             icon={<TrendingUp className="size-4" />}
           />
           <div className="space-y-2 px-6 pb-6">
-            {top.map((r) => (
+            {activeTop.map((r) => (
               <Link
                 key={r.id}
                 to={`${m.base}/${r.id}` as never}

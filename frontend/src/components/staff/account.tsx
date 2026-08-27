@@ -37,11 +37,13 @@ import {
 import {
   equipmentById,
   reportById,
-  serviceReports,
+  serviceReports as mockServiceReports,
   staffDepartment,
   staffNotifications,
   staffProfile,
 } from "@/lib/staff";
+import { apiEnabled } from "@/lib/api/client";
+import { serviceReportsApi } from "@/lib/api/serviceReportsApi";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -50,10 +52,44 @@ import { cn } from "@/lib/utils";
 export function ServiceReportsList() {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("All");
+  const [liveReports, setLiveReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(apiEnabled);
+
+  useEffect(() => {
+    if (!apiEnabled) return;
+    serviceReportsApi.list({ page: 1, limit: 100 })
+      .then((res) => {
+        if (res && res.items) {
+          const mapped = res.items.map((r: any) => {
+            const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-US", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric"
+            }) : "";
+            return {
+              id: r.serviceReportId || r._id,
+              complaintId: r.complaintId?.complaintId || r.complaintId || "",
+              equipmentId: r.equipmentId?.equipmentId || r.equipmentId || "",
+              engineer: r.engineerId?.name || "Biomedical Engineer",
+              completed: dateStr,
+              type: r.maintenanceId?.maintenanceType === "PREVENTIVE" ? "Preventive" : "Corrective",
+              summary: r.summary || "",
+              findings: r.findings || "",
+              actions: r.actions || []
+            };
+          });
+          setLiveReports(mapped);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const displayReports = apiEnabled ? liveReports : mockServiceReports;
 
   const rows = useMemo(
     () =>
-      serviceReports.filter((r) => {
+      displayReports.filter((r) => {
         const q = query.trim().toLowerCase();
         const eq = equipmentById(r.equipmentId);
         const matchQ =
@@ -63,7 +99,7 @@ export function ServiceReportsList() {
           );
         return matchQ && (type === "All" || r.type === type);
       }),
-    [query, type],
+    [displayReports, query, type],
   );
 
   return (
@@ -88,21 +124,21 @@ export function ServiceReportsList() {
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total reports"
-          value={serviceReports.length}
+          value={displayReports.length}
           hint="Available to download"
           tone="primary"
           icon={<FileText className="size-4" />}
         />
         <StatCard
           label="Corrective"
-          value={serviceReports.filter((r) => r.type === "Corrective").length}
+          value={displayReports.filter((r) => r.type === "Corrective").length}
           hint="Breakdown repairs"
           tone="warning"
           icon={<Wrench className="size-4" />}
         />
         <StatCard
           label="Preventive"
-          value={serviceReports.filter((r) => r.type === "Preventive").length}
+          value={displayReports.filter((r) => r.type === "Preventive").length}
           hint="Planned servicing"
           tone="success"
           icon={<CheckCircle2 className="size-4" />}

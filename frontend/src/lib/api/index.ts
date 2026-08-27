@@ -23,3 +23,4 @@ export * from "./userRecords";
 export * from "./departmentRecords";
 export * from "./useUsers";
 export * from "./useDepartments";
+export * from "./useAnalytics";

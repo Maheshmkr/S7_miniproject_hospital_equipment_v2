@@ -25,8 +25,14 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Panel, PanelHead, Pill } from "@/components/ui/primitives";
-import { categories, complaintFlow, costSplit, departments, healthTrend } from "@/lib/mock-data";
-import { analyticsApi, type DashboardAnalytics } from "@/lib/api/analyticsApi";
+import {
+  categories as mockCategories,
+  complaintFlow as mockComplaintFlow,
+  costSplit as mockCostSplit,
+  departments as mockDepartments,
+  healthTrend as mockHealthTrend,
+} from "@/lib/mock-data";
+import { useDashboardAnalytics } from "@/lib/api/useAnalytics";
 import { apiEnabled } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
@@ -60,19 +66,13 @@ const tip = {
 const pieColors = ["var(--chart-1)", "var(--chart-5)", "var(--chart-2)", "var(--chart-4)"];
 
 function Analytics() {
-  const [liveData, setLiveData] = useState<DashboardAnalytics | null>(null);
-
-  useEffect(() => {
-    if (!apiEnabled) return;
-    analyticsApi
-      .dashboard()
-      .then((res) => {
-        if (res?.success && res?.data) setLiveData(res.data);
-      })
-      .catch(() => {
-        /* fallback to UI defaults */
-      });
-  }, []);
+  const { data: liveData } = useDashboardAnalytics();
+  
+  const activeHealthTrend = apiEnabled && liveData?.healthTrend ? liveData.healthTrend : mockHealthTrend;
+  const activeCostSplit = apiEnabled && liveData?.costSplit ? liveData.costSplit : mockCostSplit;
+  const activeComplaintFlow = apiEnabled && liveData?.complaintFlow ? liveData.complaintFlow : mockComplaintFlow;
+  const activeDepartments = apiEnabled && liveData?.departments ? liveData.departments : mockDepartments;
+  const activeCategories = apiEnabled && liveData?.categories ? liveData.categories : mockCategories;
 
   const kpiItems = [
     {
@@ -150,7 +150,7 @@ function Analytics() {
           />
           <div className="h-[280px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={healthTrend} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
+              <AreaChart data={activeHealthTrend} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="aH" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.32} />
@@ -207,14 +207,14 @@ function Analytics() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={costSplit}
+                  data={activeCostSplit}
                   dataKey="value"
                   innerRadius={52}
                   outerRadius={80}
                   paddingAngle={4}
                   stroke="none"
                 >
-                  {costSplit.map((_, i) => (
+                  {activeCostSplit.map((_, i) => (
                     <Cell key={i} fill={pieColors[i]} />
                   ))}
                 </Pie>
@@ -223,7 +223,7 @@ function Analytics() {
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-2 gap-2 px-6 pb-6">
-            {costSplit.map((c, i) => (
+            {activeCostSplit.map((c, i) => (
               <div
                 key={c.name}
                 className="flex items-center gap-2 text-[11.5px] text-muted-foreground"
@@ -243,7 +243,7 @@ function Analytics() {
           />
           <div className="h-[210px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={healthTrend} margin={{ top: 10, right: 20, left: 0 }}>
+              <LineChart data={activeHealthTrend} margin={{ top: 10, right: 20, left: 0 }}>
                 <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="month"
@@ -280,7 +280,7 @@ function Analytics() {
           />
           <div className="h-[210px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={complaintFlow} barGap={5}>
+              <BarChart data={activeComplaintFlow} barGap={5}>
                 <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="day"
@@ -317,7 +317,7 @@ function Analytics() {
           />
           <div className="h-[210px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={departments} layout="vertical" margin={{ left: 16, right: 20 }}>
+              <BarChart data={activeDepartments} layout="vertical" margin={{ left: 16, right: 20 }}>
                 <CartesianGrid strokeDasharray="4 6" horizontal={false} stroke="var(--border)" />
                 <XAxis
                   type="number"
@@ -412,7 +412,7 @@ function Analytics() {
             icon={<Gauge className="size-4" />}
           />
           <div className="grid gap-3 px-6 pb-7 sm:grid-cols-2 xl:grid-cols-5">
-            {categories.map((c) => (
+            {activeCategories.map((c) => (
               <div
                 key={c.name}
                 className="rounded-2xl border border-border p-5 transition-all hover:-translate-y-0.5 hover:shadow-soft"

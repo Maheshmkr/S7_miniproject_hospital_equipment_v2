@@ -112,8 +112,7 @@ function useDashboardAnalytics() {
   return { data, loading };
 }
 
-function HeroBanner() {
-  const { data: analytics, loading } = useDashboardAnalytics();
+function HeroBanner({ analytics, loading }: { analytics: DashboardAnalytics | null; loading: boolean }) {
 
   const liveKpis = analytics
     ? [
@@ -225,7 +224,12 @@ function HeroBanner() {
   );
 }
 
-function EquipmentHealth() {
+function EquipmentHealth({ analytics }: { analytics: DashboardAnalytics | null }) {
+  const activeHealthTrend = apiEnabled && analytics?.healthTrend ? analytics.healthTrend : healthTrend;
+  const compositeHealth = analytics && analytics.healthTrend && analytics.healthTrend.length > 0
+    ? analytics.healthTrend[analytics.healthTrend.length - 1].health
+    : 98;
+
   return (
     <Panel className="lg:col-span-2">
       <PanelHead
@@ -252,15 +256,15 @@ function EquipmentHealth() {
       />
       <div className="flex flex-wrap items-center gap-8 px-7 pb-2">
         <div>
-          <p className="text-[32px] font-bold leading-none tabular-nums">98.1%</p>
+          <p className="text-[32px] font-bold leading-none tabular-nums">{compositeHealth}%</p>
           <p className="mt-1.5 text-[12px] text-muted-foreground">Composite health score</p>
         </div>
         <div className="h-10 w-px bg-border" />
         <div className="flex gap-6">
           {[
-            { l: "Assets monitored", v: "2,486" },
-            { l: "Incidents this month", v: "9" },
-            { l: "MTTR", v: "3.2 h" },
+            { l: "Assets monitored", v: analytics ? analytics.totalEquipment.toLocaleString() : "2,486" },
+            { l: "Incidents this month", v: analytics ? analytics.openComplaints.toString() : "9" },
+            { l: "MTTR", v: analytics ? `${(analytics.avgResolutionHours / 10).toFixed(1)} h` : "3.2 h" },
           ].map((s) => (
             <div key={s.l}>
               <p className="text-[17px] font-semibold tabular-nums">{s.v}</p>
@@ -271,7 +275,7 @@ function EquipmentHealth() {
       </div>
       <div className="h-[240px] px-2 pb-4">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={healthTrend} margin={{ top: 20, right: 24, left: 0, bottom: 0 }}>
+          <AreaChart data={activeHealthTrend} margin={{ top: 20, right: 24, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="gHealth" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
@@ -712,7 +716,8 @@ function DepartmentPerformance() {
   );
 }
 
-function EngineerWorkload() {
+function EngineerWorkload({ analytics }: { analytics: DashboardAnalytics | null }) {
+  const displayEngineers = apiEnabled && analytics?.engineers ? analytics.engineers : engineers;
   return (
     <Panel>
       <PanelHead
@@ -721,7 +726,7 @@ function EngineerWorkload() {
         icon={<Cpu className="size-4" />}
       />
       <div className="space-y-4 px-6 pb-6">
-        {engineers.map((e) => (
+        {displayEngineers.map((e) => (
           <div key={e.name} className="flex items-center gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface-muted text-[11px] font-bold text-foreground">
               {e.avatar}
@@ -877,7 +882,10 @@ function MaintenanceCalendar() {
   );
 }
 
-function AnalyticsCharts() {
+function AnalyticsCharts({ analytics }: { analytics: DashboardAnalytics | null }) {
+  const activeCostSplit = apiEnabled && analytics?.costSplit ? analytics.costSplit : costSplit;
+  const activeComplaintFlow = apiEnabled && analytics?.complaintFlow ? analytics.complaintFlow : complaintFlowData;
+
   return (
     <Panel className="lg:col-span-2">
       <PanelHead
@@ -892,14 +900,14 @@ function AnalyticsCharts() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={costSplit}
+                  data={activeCostSplit}
                   dataKey="value"
                   innerRadius={48}
                   outerRadius={72}
                   paddingAngle={4}
                   stroke="none"
                 >
-                  {costSplit.map((_, i) => (
+                  {activeCostSplit.map((_, i) => (
                     <Cell key={i} fill={pieColors[i]} />
                   ))}
                 </Pie>
@@ -925,7 +933,7 @@ function AnalyticsCharts() {
           </p>
           <div className="mt-2 h-[240px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={complaintFlowData} barGap={6}>
+              <BarChart data={activeComplaintFlow} barGap={6}>
                 <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="day"
@@ -1111,7 +1119,9 @@ function RightRail() {
   );
 }
 
-function MiniTrend() {
+function MiniTrend({ analytics }: { analytics: DashboardAnalytics | null }) {
+  const activeHealthTrend = apiEnabled && analytics?.healthTrend ? analytics.healthTrend : healthTrend;
+
   return (
     <Panel className="lg:col-span-3">
       <div className="grid gap-6 p-7 md:grid-cols-4">
@@ -1139,7 +1149,7 @@ function MiniTrend() {
             </div>
             <div className="mt-3 h-[42px]">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={healthTrend}>
+                <LineChart data={activeHealthTrend}>
                   <Line
                     type="monotone"
                     dataKey="health"
@@ -1158,22 +1168,24 @@ function MiniTrend() {
 }
 
 function Dashboard() {
+  const { data: analytics, loading } = useDashboardAnalytics();
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
-      <HeroBanner />
+      <HeroBanner analytics={analytics} loading={loading} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid gap-6 lg:grid-cols-3">
-          <EquipmentHealth />
+          <EquipmentHealth analytics={analytics} />
           <OpenComplaints />
-          <MiniTrend />
+          <MiniTrend analytics={analytics} />
           <AiInsights />
           <QuickActions />
           <MaintenanceToday />
           <UpcomingWarranty />
           <MaintenanceCalendar />
           <DepartmentPerformance />
-          <EngineerWorkload />
-          <AnalyticsCharts />
+          <EngineerWorkload analytics={analytics} />
+          <AnalyticsCharts analytics={analytics} />
           <RecentActivities />
         </div>
         <RightRail />
