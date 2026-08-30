@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Activity,
@@ -21,10 +21,12 @@ import {
   Send,
   UserRound,
   Wrench,
+  Loader2,
 } from "lucide-react";
 import { EmptyState, Meter, Panel, PanelHead, Pill, Ring } from "@/components/ui/primitives";
 import { apiEnabled } from "@/lib/api/client";
-import { useComplaintMutations } from "@/lib/api/useComplaints";
+import { useComplaintMutations, useComplaintList, useComplaintRecord } from "@/lib/api/useComplaints";
+import { useEquipmentList } from "@/lib/api/useEquipment";
 import { useMaintenanceList, useMaintenanceRecord } from "@/lib/api/useMaintenance";
 import {
   ActionButton,
@@ -76,6 +78,8 @@ export function RegisterComplaint() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const { create } = useComplaintMutations();
+  const { items: liveEquipment, loading: equipLoading } = useEquipmentList(apiEnabled ? {} : { limit: 0 });
+
   const [form, setForm] = useState({
     equipmentId: staffEquipment[0]!.id,
     category: complaintCategories[0]! as StaffComplaint["category"],
@@ -89,10 +93,34 @@ export function RegisterComplaint() {
     contactNumber: staffProfile.phone,
   });
 
-  const asset = equipmentById(form.equipmentId)!;
+  useEffect(() => {
+    if (apiEnabled && liveEquipment && liveEquipment.length > 0) {
+      const firstId = liveEquipment[0]._id;
+      setForm((f) => ({ ...f, equipmentId: firstId }));
+    }
+  }, [liveEquipment]);
+
+  const asset = useMemo(() => {
+    if (!apiEnabled || !liveEquipment) {
+      return equipmentById(form.equipmentId);
+    }
+    const live = liveEquipment.find((e) => e._id === form.equipmentId || e.equipmentId === form.equipmentId);
+    if (!live) return null;
+    return {
+      id: live.equipmentId,
+      _id: live._id,
+      name: live.name,
+      category: live.category,
+      manufacturer: live.manufacturer || "Unknown",
+      dept: typeof live.departmentId === "object" && live.departmentId ? live.departmentId.name : "Radiology",
+      location: live.location || "Main Clinic",
+      status: live.status,
+      health: live.healthScore ?? 100,
+    };
+  }, [liveEquipment, form.equipmentId]) as any;
 
   const submit = () => {
-    if (!apiEnabled) {
+    if (!apiEnabled || !asset) {
       setSubmitted(true);
       return;
     }
@@ -106,7 +134,7 @@ export function RegisterComplaint() {
       ]
         .filter(Boolean)
         .join("\n"),
-      equipment: asset.name,
+      equipment: asset.id,
       priority: form.priority,
     })
       .then((complaint) => {
@@ -165,6 +193,14 @@ export function RegisterComplaint() {
             </div>
           </div>
         </Panel>
+      </div>
+    );
+  }
+
+  if (apiEnabled && equipLoading) {
+    return (
+      <div className="mx-auto max-w-[1200px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading department assets…
       </div>
     );
   }
@@ -229,11 +265,17 @@ export function RegisterComplaint() {
                   value={form.equipmentId}
                   onChange={(e) => set("equipmentId", e.target.value)}
                 >
-                  {staffEquipment.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.id} — {e.name} · {e.location}
-                    </option>
-                  ))}
+                  {apiEnabled && liveEquipment
+                    ? liveEquipment.map((e) => (
+                        <option key={e._id} value={e._id}>
+                          {e.equipmentId} — {e.name} · {e.location}
+                        </option>
+                      ))
+                    : staffEquipment.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.id} — {e.name} · {e.location}
+                        </option>
+                      ))}
                 </select>
               </div>
               <div>
@@ -507,9 +549,55 @@ export function ComplaintHistory() {
   const [priority, setPriority] = useState("All");
   const [range, setRange] = useState("All time");
 
+  const { items: liveComplaints, loading: complaintsLoading } = useComplaintList(apiEnabled ? {} : { limit: 0 });
+
+  const displayComplaints = useMemo(() => {
+    if (!apiEnabled || !liveComplaints) return staffComplaints;
+    return liveComplaints.map((c) => {
+      let staffStatus: StaffComplaint["status"] = "Submitted";
+      if (c.status === "OPEN") staffStatus = "Submitted";
+      else if (c.status === "ASSIGNED") staffStatus = "Assigned";
+      else if (c.status === "MAINTENANCE_IN_PROGRESS") staffStatus = "In Progress";
+      else if (c.status === "AWAITING_PARTS") staffStatus = "Awaiting Parts";
+      else if (c.status === "RESOLVED") staffStatus = "Resolved";
+      else if (c.status === "CLOSED") staffStatus = "Closed";
+      
+      const eqName = typeof c.equipmentId === "object" && c.equipmentId ? c.equipmentId.name : "Hamilton C6 ICU Ventilator";
+      const eqId = typeof c.equipmentId === "object" && c.equipmentId ? c.equipmentId.equipmentId : String(c.equipmentId || "");
+
+      return {
+        id: c.complaintId || c._id,
+        title: c.title,
+        equipmentId: eqId,
+        category: "Software" as const,
+        priority: (c.priority === "CRITICAL" ? "Critical" : c.priority === "HIGH" ? "High" : c.priority === "LOW" ? "Low" : "Medium") as StaffComplaint["priority"],
+        description: c.description,
+        status: staffStatus,
+        progress: c.status === "RESOLVED" || c.status === "CLOSED" ? 100 : 30,
+        engineer: typeof c.assignedEngineerId === "object" && c.assignedEngineerId ? c.assignedEngineerId.name : "Unassigned",
+        reportedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
+        created: new Date(c.createdAt).toLocaleDateString(),
+        updated: new Date(c.updatedAt || c.createdAt).toLocaleDateString(),
+        expected: "1 working day",
+        raisedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
+        contact: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.email || "Staff" : "Staff",
+        stage: c.status === "OPEN" ? "Submitted" : c.status === "ASSIGNED" ? "Scheduled" : "In Progress",
+        parts: [],
+        remarks: c.resolution || "",
+        notes: [],
+        messages: [],
+        photos: [],
+        attachments: [],
+        symptoms: c.description.includes("Symptoms:") ? c.description.split("Symptoms:")[1].split(",").map((s: string) => s.trim()) : [],
+        timeline: [],
+        reportId: c.workOrderId ? String(c.workOrderId) : undefined
+      };
+    });
+  }, [liveComplaints]);
+
   const rows = useMemo(
     () =>
-      staffComplaints.filter((c) => {
+      displayComplaints.filter((c) => {
         const q = query.trim().toLowerCase();
         const eq = equipmentById(c.equipmentId);
         const matchQ =
@@ -521,10 +609,24 @@ export function ComplaintHistory() {
           (priority === "All" || c.priority === priority)
         );
       }),
-    [query, status, priority],
+    [query, status, priority, displayComplaints],
   );
 
-  const open = staffComplaints.filter((c) => !["Resolved", "Closed"].includes(c.status)).length;
+  const stats = useMemo(() => {
+    const total = displayComplaints.length;
+    const open = displayComplaints.filter((c) => !["Resolved", "Closed"].includes(c.status)).length;
+    const critical = displayComplaints.filter((c) => c.priority === "Critical").length;
+    const closed = displayComplaints.filter((c) => ["Resolved", "Closed"].includes(c.status)).length;
+    return { total, open, critical, closed };
+  }, [displayComplaints]);
+
+  if (apiEnabled && complaintsLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading complaints history…
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
@@ -548,28 +650,28 @@ export function ComplaintHistory() {
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total complaints"
-          value={staffComplaints.length}
+          value={stats.total}
           hint="All time"
           tone="primary"
           icon={<ClipboardList className="size-4" />}
         />
         <StatCard
           label="Open"
-          value={open}
+          value={stats.open}
           hint="Awaiting resolution"
           tone="warning"
           icon={<Clock className="size-4" />}
         />
         <StatCard
           label="Critical"
-          value={staffComplaints.filter((c) => c.priority === "Critical").length}
+          value={stats.critical}
           hint="Highest urgency"
           tone="danger"
           icon={<CircleAlert className="size-4" />}
         />
         <StatCard
           label="Closed"
-          value={staffComplaints.filter((c) => ["Resolved", "Closed"].includes(c.status)).length}
+          value={stats.closed}
           hint="With service report"
           tone="success"
           icon={<CheckCircle2 className="size-4" />}
@@ -579,7 +681,7 @@ export function ComplaintHistory() {
       <Panel>
         <PanelHead
           title="All complaints"
-          subtitle={`${rows.length} of ${staffComplaints.length} shown`}
+          subtitle={`${rows.length} of ${displayComplaints.length} shown`}
           icon={<Filter className="size-4" />}
         />
         <div className="grid gap-3 px-6 pb-5 sm:px-7 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
@@ -710,7 +812,77 @@ export function ComplaintHistory() {
 /* ============================= Complaint details ============================= */
 
 export function ComplaintDetails({ id }: { id: string }) {
-  const complaint = complaintById(id);
+  const { item: liveComplaint, loading: complaintLoading } = useComplaintRecord(id);
+
+  const complaint = useMemo(() => {
+    if (!apiEnabled || !liveComplaint) return complaintById(id);
+    const c = liveComplaint;
+    let staffStatus: StaffComplaint["status"] = "Submitted";
+    if (c.status === "OPEN") staffStatus = "Submitted";
+    else if (c.status === "ASSIGNED") staffStatus = "Assigned";
+    else if (c.status === "MAINTENANCE_IN_PROGRESS") staffStatus = "In Progress";
+    else if (c.status === "AWAITING_PARTS") staffStatus = "Awaiting Parts";
+    else if (c.status === "RESOLVED") staffStatus = "Resolved";
+    else if (c.status === "CLOSED") staffStatus = "Closed";
+    
+    const eqId = typeof c.equipmentId === "object" && c.equipmentId ? c.equipmentId.equipmentId : String(c.equipmentId || "");
+
+    return {
+      id: c.complaintId || c._id,
+      title: c.title,
+      equipmentId: eqId,
+      category: "Software" as const,
+      priority: (c.priority === "CRITICAL" ? "Critical" : c.priority === "HIGH" ? "High" : c.priority === "LOW" ? "Low" : "Medium") as StaffComplaint["priority"],
+      description: c.description,
+      status: staffStatus,
+      progress: c.status === "RESOLVED" || c.status === "CLOSED" ? 100 : 30,
+      engineer: typeof c.assignedEngineerId === "object" && c.assignedEngineerId ? c.assignedEngineerId.name : "Unassigned",
+      reportedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
+      created: new Date(c.createdAt).toLocaleDateString(),
+      updated: new Date(c.updatedAt || c.createdAt).toLocaleDateString(),
+      expected: "1 working day",
+      raisedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
+      contact: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.email || "Staff" : "Staff",
+      stage: c.status === "OPEN" ? "Submitted" : c.status === "ASSIGNED" ? "Scheduled" : "In Progress",
+      parts: [],
+      remarks: c.resolution || "",
+      notes: [],
+      messages: [],
+      photos: [],
+      attachments: [],
+      symptoms: c.description.includes("Symptoms:") ? c.description.split("Symptoms:")[1].split(",").map((s: string) => s.trim()) : [],
+      timeline: [],
+      reportId: c.workOrderId ? String(c.workOrderId) : undefined
+    };
+  }, [liveComplaint]);
+
+  const asset = useMemo(() => {
+    if (!complaint) return null;
+    return equipmentById(complaint.equipmentId);
+  }, [complaint]);
+
+  const engineer = useMemo(() => {
+    if (!complaint) return null;
+    return deptEngineers.find((e) => e.name === complaint.engineer) ?? deptEngineers[0]!;
+  }, [complaint]);
+
+  const work = useMemo(() => {
+    if (!complaint) return null;
+    return staffMaintenance.find((m) => m.complaintId === complaint.id);
+  }, [complaint]);
+
+  const report = useMemo(() => {
+    if (!complaint || !complaint.reportId) return null;
+    return reportById(complaint.reportId);
+  }, [complaint]);
+
+  if (apiEnabled && complaintLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading complaint details…
+      </div>
+    );
+  }
 
   if (!complaint) {
     return (
@@ -731,11 +903,6 @@ export function ComplaintDetails({ id }: { id: string }) {
       </div>
     );
   }
-
-  const asset = equipmentById(complaint.equipmentId);
-  const engineer = deptEngineers.find((e) => e.name === complaint.engineer) ?? deptEngineers[0]!;
-  const work = staffMaintenance.find((m) => m.complaintId === complaint.id);
-  const report = complaint.reportId ? reportById(complaint.reportId) : undefined;
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Area,
@@ -38,8 +38,14 @@ import {
   ShieldCheck,
   Sparkles,
   Wrench,
+  Loader2,
 } from "lucide-react";
 import { Meter, Panel, PanelHead, Pill, Ring, EmptyState } from "@/components/ui/primitives";
+import { apiEnabled } from "@/lib/api/client";
+import { analyticsApi, type DashboardAnalytics } from "@/lib/api/analyticsApi";
+import { useEquipmentList, useEquipmentRecord } from "@/lib/api/useEquipment";
+import { useComplaintList } from "@/lib/api/useComplaints";
+import { useMaintenanceList } from "@/lib/api/useMaintenance";
 import {
   ActionLink,
   DefRow,
@@ -67,6 +73,7 @@ import {
   staffStats,
   upcomingMaintenance,
   type StaffEquipment,
+  type StaffComplaint,
 } from "@/lib/staff";
 import { cn } from "@/lib/utils";
 
@@ -74,16 +81,85 @@ const chartTip = {
   contentStyle: { borderRadius: 14, fontSize: 12, border: "1px solid var(--border)" },
 };
 
-/* ================================= Dashboard ================================= */
+/* ================= Dashboard ================= */
+
+function useStaffDashboardAnalytics() {
+  const [data, setData] = useState<DashboardAnalytics | null>(null);
+  const [loading, setLoading] = useState(apiEnabled);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!apiEnabled) return;
+    setLoading(true);
+    analyticsApi
+      .dashboard()
+      .then(setData)
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load dashboard data"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { data, loading, error };
+}
 
 export function StaffDashboard() {
+  const { data: analytics, loading: analyticsLoading } = useStaffDashboardAnalytics();
+  const { total: liveComplaintsCount } = useComplaintList(apiEnabled ? { status: "OPEN" } : { limit: 0 });
+  const { total: liveCompletedCount } = useComplaintList(apiEnabled ? { status: "RESOLVED" } : { limit: 0 });
+  const { total: liveMaintenanceCount } = useMaintenanceList(apiEnabled ? {} : { limit: 0 });
+  const { items: liveEquipment } = useEquipmentList(apiEnabled ? {} : { limit: 0 });
+
+  const stats = useMemo(() => {
+    if (!apiEnabled || !analytics) return staffStats;
+    const total = analytics.totalEquipment;
+    const active = analytics.operational;
+    const maintenance = analytics.underMaintenance + analytics.breakdown;
+    const open = liveComplaintsCount ?? analytics.openComplaints;
+    const completed = liveCompletedCount ?? analytics.resolvedComplaints;
+    const upcoming = liveMaintenanceCount ?? (analytics.workOrders - analytics.completedWorkOrders);
+    
+    const health = analytics.healthTrend && analytics.healthTrend.length > 0
+      ? analytics.healthTrend[analytics.healthTrend.length - 1].health
+      : total > 0 ? Math.round((active / total) * 100) : 100;
+
+    return {
+      total,
+      active,
+      maintenance,
+      open,
+      completed,
+      upcoming,
+      health
+    };
+  }, [analytics, liveComplaintsCount, liveCompletedCount, liveMaintenanceCount]);
+
+  const activeHealthTrend = apiEnabled && analytics?.healthTrend ? analytics.healthTrend : staffHealthTrend;
+  
+  const activeComplaintTrend = useMemo(() => {
+    if (apiEnabled && analytics?.complaintFlow) {
+      return analytics.complaintFlow.map((f, idx) => ({
+        week: `Wk ${idx + 1}`,
+        raised: f.raised,
+        resolved: f.resolved
+      }));
+    }
+    return staffComplaintTrend;
+  }, [analytics]);
+
+  if (apiEnabled && analyticsLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading department dashboard…
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <StaffCrumbs trail={[{ label: "Dashboard" }]} />
       <StaffHero
         eyebrow={`${staffDepartment.name} · ${staffDepartment.code}`}
         title={`Welcome back, ${staffProfile.name.split(" ")[0]}`}
-        description={`${staffStats.total} assets under your department, ${staffStats.open} open complaints and ${staffStats.upcoming} maintenance visits scheduled. Department health score is ${staffStats.health}%.`}
+        description={`${stats.total} assets under your department, ${stats.open} open complaints and ${stats.upcoming} maintenance visits scheduled. Department health score is ${stats.health}%.`}
         actions={
           <>
             <ActionLink
@@ -104,7 +180,7 @@ export function StaffDashboard() {
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total equipment"
-          value={staffStats.total}
+          value={stats.total}
           hint="Assigned to Radiology"
           tone="primary"
           to="/staff/equipment"
@@ -112,7 +188,7 @@ export function StaffDashboard() {
         />
         <StatCard
           label="Active equipment"
-          value={staffStats.active}
+          value={stats.active}
           hint="Operational right now"
           tone="success"
           to="/staff/equipment"
@@ -120,7 +196,7 @@ export function StaffDashboard() {
         />
         <StatCard
           label="Under maintenance"
-          value={staffStats.maintenance}
+          value={stats.maintenance}
           hint="Being serviced or critical"
           tone="warning"
           to="/staff/maintenance"
@@ -128,7 +204,7 @@ export function StaffDashboard() {
         />
         <StatCard
           label="Open complaints"
-          value={staffStats.open}
+          value={stats.open}
           hint="Awaiting resolution"
           tone="danger"
           to="/staff/complaints"
@@ -139,7 +215,7 @@ export function StaffDashboard() {
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Completed complaints"
-          value={staffStats.completed}
+          value={stats.completed}
           hint="Resolved and closed"
           tone="success"
           to="/staff/complaints"
@@ -147,7 +223,7 @@ export function StaffDashboard() {
         />
         <StatCard
           label="Upcoming maintenance"
-          value={staffStats.upcoming}
+          value={stats.upcoming}
           hint="Next 90 days"
           tone="violet"
           to="/staff/maintenance"
@@ -163,7 +239,7 @@ export function StaffDashboard() {
         />
         <StatCard
           label="Department health"
-          value={`${staffStats.health}%`}
+          value={`${stats.health}%`}
           hint="Weighted asset score"
           tone="success"
           to="/staff/department"
@@ -181,7 +257,7 @@ export function StaffDashboard() {
           />
           <div className="h-[280px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={staffHealthTrend}>
+              <AreaChart data={activeHealthTrend}>
                 <defs>
                   <linearGradient id="staffHealth" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
@@ -231,7 +307,7 @@ export function StaffDashboard() {
             icon={<Gauge className="size-4" />}
           />
           <div className="flex flex-col items-center gap-4 px-6 pb-7">
-            <Ring value={staffStats.health} size={132} sub="health" />
+            <Ring value={stats.health} size={132} sub="health" />
             <div className="grid w-full grid-cols-2 gap-2 text-center">
               <div className="rounded-2xl bg-surface-muted/70 py-3">
                 <p className="text-[17px] font-bold tabular-nums">98%</p>
@@ -253,7 +329,7 @@ export function StaffDashboard() {
           />
           <div className="h-[240px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={staffComplaintTrend} barGap={6}>
+              <BarChart data={activeComplaintTrend} barGap={6}>
                 <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="week"
@@ -360,14 +436,67 @@ export function StaffEquipmentWorkspace() {
   const [category, setCategory] = useState("All");
   const [view, setView] = useState<"table" | "cards">("table");
 
+  const { items: liveEquipment, loading: equipLoading } = useEquipmentList(apiEnabled ? {} : { limit: 0 });
+
+  const displayEquipment = useMemo(() => {
+    if (!apiEnabled || !liveEquipment) return staffEquipment;
+    return liveEquipment.map((e) => {
+      let staffStatus: "Operational" | "Under Maintenance" | "Critical" | "Idle" = "Operational";
+      if (e.status === "UNDER_MAINTENANCE") staffStatus = "Under Maintenance";
+      else if (e.status === "UNDER_BREAKDOWN" || e.status === "CRITICAL") staffStatus = "Critical";
+      else if (e.status === "IDLE") staffStatus = "Idle";
+
+      return {
+        id: e.equipmentId,
+        _id: e._id,
+        name: e.name,
+        category: e.category,
+        manufacturer: e.manufacturer || "Unknown",
+        dept: typeof e.departmentId === "object" && e.departmentId ? e.departmentId.name : "Radiology",
+        location: e.location || "Main Clinic",
+        status: staffStatus,
+        health: e.healthScore ?? 100,
+        warranty: e.warrantyExpiry ? new Date(e.warrantyExpiry).toLocaleDateString() : "Active",
+        warrantyStatus: "Active" as const,
+        amc: "Comprehensive",
+        amcStatus: "Comprehensive" as const,
+        purchased: e.purchaseDate ? new Date(e.purchaseDate).toLocaleDateString() : "10 Jan 2022",
+        installed: e.installationDate ? new Date(e.installationDate).toLocaleDateString() : "12 Jan 2022",
+        lastService: "03 Mar 2026",
+        nextService: e.nextPreventiveDate ? new Date(e.nextPreventiveDate).toLocaleDateString() : "03 Sep 2026",
+        specs: {
+          model: e.model || "Standard",
+          serial: e.serialNumber || "SN-1000",
+          manufactured: "2021",
+          installed: e.installationDate ? new Date(e.installationDate).toLocaleDateString() : "12 Jan 2022",
+          location: e.location || "Main Clinic",
+          owner: "Hospital",
+          power: "240V",
+          weight: "120kg",
+          dimensions: "1.2m x 0.8m x 1.5m",
+          software: "v4.2.1",
+          riskClass: e.criticality || "High",
+          usageHours: "1,240 h",
+          lastService: "03 Mar 2026",
+          nextService: e.nextPreventiveDate ? new Date(e.nextPreventiveDate).toLocaleDateString() : "03 Sep 2026",
+          amc: "Active",
+          compliance: "100%",
+        },
+        documents: [],
+        service: [],
+        timeline: [],
+      };
+    });
+  }, [liveEquipment]);
+
   const categories = useMemo(
-    () => ["All", ...Array.from(new Set(staffEquipment.map((e) => e.category)))],
-    [],
+    () => ["All", ...Array.from(new Set(displayEquipment.map((e) => e.category)))],
+    [displayEquipment],
   );
 
   const rows = useMemo(
     () =>
-      staffEquipment.filter((e) => {
+      displayEquipment.filter((e) => {
         const q = query.trim().toLowerCase();
         const matchQ =
           !q ||
@@ -380,8 +509,24 @@ export function StaffEquipmentWorkspace() {
           (category === "All" || e.category === category)
         );
       }),
-    [query, status, category],
+    [query, status, category, displayEquipment],
   );
+
+  const stats = useMemo(() => {
+    const total = displayEquipment.length;
+    const active = displayEquipment.filter((e) => e.status === "Operational").length;
+    const maintenance = displayEquipment.filter((e) => e.status === "Under Maintenance" || e.status === "Critical").length;
+    const health = total > 0 ? Math.round(displayEquipment.reduce((a, e) => a + e.health, 0) / total) : 100;
+    return { total, active, maintenance, health };
+  }, [displayEquipment]);
+
+  if (apiEnabled && equipLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading equipment register…
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
@@ -405,28 +550,28 @@ export function StaffEquipmentWorkspace() {
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total assets"
-          value={staffStats.total}
+          value={stats.total}
           hint="Radiology register"
           tone="primary"
           icon={<Cpu className="size-4" />}
         />
         <StatCard
           label="Operational"
-          value={staffStats.active}
+          value={stats.active}
           hint="Available for clinical use"
           tone="success"
           icon={<CircleCheck className="size-4" />}
         />
         <StatCard
           label="Needs attention"
-          value={staffStats.maintenance}
+          value={stats.maintenance}
           hint="Maintenance or critical"
           tone="warning"
           icon={<Wrench className="size-4" />}
         />
         <StatCard
           label="Avg health"
-          value={`${staffStats.health}%`}
+          value={`${stats.health}%`}
           hint="Across all assets"
           tone="violet"
           icon={<HeartPulse className="size-4" />}
@@ -436,7 +581,7 @@ export function StaffEquipmentWorkspace() {
       <Panel>
         <PanelHead
           title="Asset register"
-          subtitle={`${rows.length} of ${staffEquipment.length} assets shown`}
+          subtitle={`${rows.length} of ${displayEquipment.length} assets shown`}
           icon={<Filter className="size-4" />}
           action={
             <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface p-1">
@@ -636,7 +781,120 @@ function EquipmentCard({ item }: { item: StaffEquipment }) {
 /* ============================= Equipment details ============================= */
 
 export function StaffEquipmentDetails({ id }: { id: string }) {
-  const asset = equipmentById(id);
+  const { item: liveAsset, loading: assetLoading } = useEquipmentRecord(id);
+
+  const asset = useMemo(() => {
+    if (!apiEnabled || !liveAsset) return equipmentById(id);
+    return {
+      id: liveAsset.equipmentId,
+      _id: liveAsset._id,
+      name: liveAsset.name,
+      category: liveAsset.category,
+      manufacturer: liveAsset.manufacturer || "Unknown",
+      dept: typeof liveAsset.departmentId === "object" && liveAsset.departmentId ? liveAsset.departmentId.name : "Radiology",
+      location: liveAsset.location || "Main Clinic",
+      status: liveAsset.status === "OPERATIONAL" ? "Operational" : liveAsset.status === "UNDER_MAINTENANCE" ? "Under Maintenance" : liveAsset.status === "UNDER_BREAKDOWN" || liveAsset.status === "CRITICAL" ? "Critical" : "Idle" as const,
+      health: liveAsset.healthScore ?? 100,
+      warranty: liveAsset.warrantyExpiry ? new Date(liveAsset.warrantyExpiry).toLocaleDateString() : "Active",
+      warrantyStatus: "Active" as const,
+      amcStatus: "Comprehensive" as const,
+      nextService: liveAsset.nextPreventiveDate ? new Date(liveAsset.nextPreventiveDate).toLocaleDateString() : "03 Sep 2026",
+      specs: {
+        model: liveAsset.model || "Unknown",
+        serial: liveAsset.serialNumber || "Unknown",
+        power: "220V",
+        weight: "12 kg",
+      },
+      purchased: liveAsset.purchaseDate ? new Date(liveAsset.purchaseDate).toLocaleDateString() : "01 Jan 2024",
+      installed: liveAsset.installationDate ? new Date(liveAsset.installationDate).toLocaleDateString() : "01 Jan 2024",
+      amc: "Comprehensive AMC",
+      lastService: "01 Jun 2026",
+      timeline: [],
+      service: [],
+      documents: [],
+    };
+  }, [liveAsset, id]);
+
+  const complaintQuery = apiEnabled && liveAsset?._id ? { equipmentId: liveAsset._id } : { limit: 0 };
+  const { items: liveComplaints } = useComplaintList(complaintQuery);
+
+  const maintenanceQuery = apiEnabled && liveAsset?._id ? { equipmentId: liveAsset._id } : { limit: 0 };
+  const { items: liveMaintenance } = useMaintenanceList(maintenanceQuery);
+
+  const linkedComplaints = useMemo(() => {
+    if (!apiEnabled || !liveComplaints) {
+      return asset ? staffComplaints.filter((c) => c.equipmentId === asset.id) : [];
+    }
+    return liveComplaints.map((c) => {
+      let staffStatus: StaffComplaint["status"] = "Submitted";
+      if (c.status === "OPEN") staffStatus = "Submitted";
+      else if (c.status === "ASSIGNED") staffStatus = "Assigned";
+      else if (c.status === "MAINTENANCE_IN_PROGRESS") staffStatus = "In Progress";
+      else if (c.status === "AWAITING_PARTS") staffStatus = "Awaiting Parts";
+      else if (c.status === "RESOLVED") staffStatus = "Resolved";
+      else if (c.status === "CLOSED") staffStatus = "Closed";
+
+      return {
+        id: c.complaintId || c._id,
+        title: c.title,
+        equipmentId: liveAsset?.equipmentId || "",
+        category: "Software" as const,
+        priority: (c.priority === "CRITICAL" ? "Critical" : c.priority === "HIGH" ? "High" : c.priority === "LOW" ? "Low" : "Medium") as StaffComplaint["priority"],
+        description: c.description,
+        status: staffStatus,
+        progress: c.status === "RESOLVED" || c.status === "CLOSED" ? 100 : 30,
+        engineer: typeof c.assignedEngineerId === "object" && c.assignedEngineerId ? c.assignedEngineerId.name : "Unassigned",
+        reportedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
+        created: new Date(c.createdAt).toLocaleDateString(),
+        updated: new Date(c.updatedAt || c.createdAt).toLocaleDateString(),
+        expected: "1 working day",
+        raisedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
+        contact: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.email || "Staff" : "Staff",
+        stage: c.status === "OPEN" ? "Submitted" : c.status === "ASSIGNED" ? "Scheduled" : "In Progress",
+        parts: [],
+        remarks: c.resolution || "",
+        notes: [],
+        messages: [],
+        photos: [],
+        attachments: [],
+        symptoms: c.description.includes("Symptoms:") ? c.description.split("Symptoms:")[1].split(",").map((s: string) => s.trim()) : [],
+        timeline: [],
+        reportId: c.workOrderId ? String(c.workOrderId) : undefined
+      };
+    });
+  }, [liveComplaints, liveAsset, asset]);
+
+  const linkedWork = useMemo(() => {
+    if (!apiEnabled || !liveMaintenance) {
+      return asset ? staffMaintenance.filter((m) => m.equipmentId === asset.id) : [];
+    }
+    return liveMaintenance.map((m) => {
+      return {
+        id: m.maintenanceId || m._id,
+        equipmentId: liveAsset?.equipmentId || "",
+        type: m.maintenanceType === "PREVENTIVE" ? ("Preventive" as const) : ("Corrective" as const),
+        stage: m.status === "COMPLETED" ? "Verification" : "In Progress",
+        status: m.status === "COMPLETED" ? ("Completed" as const) : m.status === "AWAITING_PARTS" ? ("Awaiting Parts" as const) : m.status === "SCHEDULED" ? ("Scheduled" as const) : ("In Progress" as const),
+        progress: m.status === "COMPLETED" ? 100 : 50,
+        engineer: typeof m.engineerId === "object" && m.engineerId ? m.engineerId.name : "Unassigned",
+        started: m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "",
+        expected: "Today",
+        timeline: [],
+        parts: [],
+        remarks: "",
+        images: [],
+        steps: [],
+      };
+    });
+  }, [liveMaintenance, liveAsset, asset]);
+
+  if (apiEnabled && assetLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading equipment details…
+      </div>
+    );
+  }
 
   if (!asset) {
     return (
@@ -657,9 +915,6 @@ export function StaffEquipmentDetails({ id }: { id: string }) {
       </div>
     );
   }
-
-  const linkedComplaints = staffComplaints.filter((c) => c.equipmentId === asset.id);
-  const linkedWork = staffMaintenance.filter((m) => m.equipmentId === asset.id);
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
@@ -965,6 +1220,40 @@ const pieColors = [
 ];
 
 export function StaffDepartmentProfile() {
+  const { data: analytics, loading: analyticsLoading } = useStaffDashboardAnalytics();
+
+  const stats = useMemo(() => {
+    if (!apiEnabled || !analytics) return staffStats;
+    const total = analytics.totalEquipment;
+    const active = analytics.operational;
+    const maintenance = analytics.underMaintenance + analytics.breakdown;
+    const open = analytics.openComplaints;
+    const completed = analytics.resolvedComplaints;
+    const upcoming = analytics.workOrders - analytics.completedWorkOrders;
+    
+    const health = analytics.healthTrend && analytics.healthTrend.length > 0
+      ? analytics.healthTrend[analytics.healthTrend.length - 1].health
+      : total > 0 ? Math.round((active / total) * 100) : 100;
+
+    return {
+      total,
+      active,
+      maintenance,
+      open,
+      completed,
+      upcoming,
+      health
+    };
+  }, [analytics]);
+
+  if (apiEnabled && analyticsLoading) {
+    return (
+      <div className="mx-auto max-w-[1600px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading department profile…
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <StaffCrumbs trail={[{ label: "Department profile" }]} />
@@ -983,28 +1272,28 @@ export function StaffDepartmentProfile() {
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total equipment"
-          value={staffStats.total}
+          value={stats.total}
           hint="Assets on register"
           tone="primary"
           icon={<Cpu className="size-4" />}
         />
         <StatCard
           label="Active complaints"
-          value={staffStats.open}
+          value={stats.open}
           hint="Currently open"
           tone="warning"
           icon={<CircleAlert className="size-4" />}
         />
         <StatCard
           label="Completed complaints"
-          value={staffStats.completed}
+          value={stats.completed}
           hint="Last 30 days"
           tone="success"
           icon={<CircleCheck className="size-4" />}
         />
         <StatCard
           label="Health score"
-          value={`${staffStats.health}%`}
+          value={`${stats.health}%`}
           hint="Composite department score"
           tone="violet"
           icon={<HeartPulse className="size-4" />}

@@ -11,7 +11,7 @@ import { apiEnabled, getToken, setToken } from "@/lib/api/client";
 import { authApi } from "@/lib/api/authApi";
 import type { ApiRole, ApiUser } from "@/lib/api/types";
 
-export type Role = "admin" | "engineer" | "staff";
+export type Role = "admin" | "engineer" | "staff" | "technician";
 
 export type SessionUser = {
   email: string;
@@ -60,9 +60,15 @@ const roleFromApi: Record<ApiRole, Role> = {
   ADMINISTRATOR: "admin",
   BIOMEDICAL_ENGINEER: "engineer",
   DEPARTMENT_STAFF: "staff",
+  TECHNICIAN: "technician",
 };
 
-const homeForRole: Record<Role, string> = { admin: "/", engineer: "/engineer", staff: "/staff" };
+const homeForRole: Record<Role, string> = {
+  admin: "/",
+  engineer: "/engineer",
+  staff: "/staff",
+  technician: "/inventory",
+};
 
 function toSessionUser(apiUser: ApiUser): SessionUser {
   const role = roleFromApi[apiUser.role] ?? "staff";

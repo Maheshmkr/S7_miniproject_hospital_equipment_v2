@@ -962,7 +962,7 @@ export function EngineerEquipmentDetails({ id }: { id: string }) {
           <>
             <ActionButton
               variant="ghost"
-              to="/equipment/$id"
+              to="/engineer/equipment/$id"
               params={{ id: asset.id }}
               icon={FileText}
             >

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Bell,
@@ -22,6 +22,7 @@ import {
   Smartphone,
   UserRound,
   Wrench,
+  Loader2,
 } from "lucide-react";
 import { EmptyState, Meter, Panel, PanelHead, Pill } from "@/components/ui/primitives";
 import {
@@ -45,6 +46,7 @@ import {
 import { apiEnabled } from "@/lib/api/client";
 import { serviceReportsApi } from "@/lib/api/serviceReportsApi";
 import { useAuth } from "@/lib/auth";
+import { useNotifications } from "@/lib/api/useNotifications";
 import { cn } from "@/lib/utils";
 
 /* ============================== Service reports ============================== */
@@ -145,7 +147,7 @@ export function ServiceReportsList() {
         />
         <StatCard
           label="Calibration"
-          value={serviceReports.filter((r) => r.type === "Calibration").length}
+          value={displayReports.filter((r) => r.type === "Calibration").length}
           hint="Certificates issued"
           tone="violet"
           icon={<ShieldCheck className="size-4" />}
@@ -155,7 +157,7 @@ export function ServiceReportsList() {
       <Panel>
         <PanelHead
           title="All service reports"
-          subtitle={`${rows.length} of ${serviceReports.length} shown`}
+          subtitle={`${rows.length} of ${displayReports.length} shown`}
           icon={<Filter className="size-4" />}
         />
         <div className="grid gap-3 px-6 pb-5 sm:px-7 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -260,7 +262,58 @@ export function ServiceReportsList() {
 }
 
 export function ServiceReportDetails({ id }: { id: string }) {
-  const report = reportById(id);
+  const [liveReport, setLiveReport] = useState<any | null>(null);
+  const [loading, setLoading] = useState(apiEnabled);
+
+  useEffect(() => {
+    if (!apiEnabled) return;
+    setLoading(true);
+    serviceReportsApi.get(id)
+      .then((response) => {
+        if (response) {
+          const res = response as any;
+          const dateStr = res.createdAt ? new Date(res.createdAt).toLocaleDateString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+          }) : "";
+          setLiveReport({
+            id: res.serviceReportId || res._id,
+            complaintId: typeof res.complaintId === "object" && res.complaintId ? res.complaintId.complaintId || res.complaintId._id : res.complaintId || "",
+            equipmentId: typeof res.equipmentId === "object" && res.equipmentId ? res.equipmentId.equipmentId || res.equipmentId._id : res.equipmentId || "",
+            engineer: typeof res.engineerId === "object" && res.engineerId ? res.engineerId.name : "Biomedical Engineer",
+            completed: dateStr,
+            type: "Corrective",
+            summary: res.correctiveAction || res.engineerRemarks || "",
+            findings: res.diagnosticFindings || res.problem || "",
+            actions: res.partsUsed ? res.partsUsed.map((p: any) => `${p.name} (${p.partNo}) x${p.qty}`) : [],
+            outcome: res.finalCondition || "Operational",
+            timeTaken: "2 h",
+            downtime: "2 h",
+            signedBy: typeof res.engineerId === "object" && res.engineerId ? res.engineerId.name : "Biomedical Engineer",
+            verifiedBy: res.reviewedBy?.name || "Pending Verification",
+            parts: res.partsUsed ? res.partsUsed.map((p: any) => ({ part: p.name, code: p.partNo, qty: p.qty })) : [],
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const report = apiEnabled ? liveReport : reportById(id);
+
+  const eq = useMemo(() => {
+    if (!report) return null;
+    return equipmentById(report.equipmentId);
+  }, [report]);
+
+  if (apiEnabled && loading) {
+    return (
+      <div className="mx-auto max-w-[1600px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading service report…
+      </div>
+    );
+  }
 
   if (!report) {
     return (
@@ -281,8 +334,6 @@ export function ServiceReportDetails({ id }: { id: string }) {
       </div>
     );
   }
-
-  const eq = equipmentById(report.equipmentId);
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
@@ -329,7 +380,7 @@ export function ServiceReportDetails({ id }: { id: string }) {
             </p>
             <p className="mt-4 text-[12px] font-semibold">Actions performed</p>
             <ul className="mt-2 space-y-2">
-              {report.actions.map((a) => (
+              {report.actions.map((a: string) => (
                 <li
                   key={a}
                   className="flex items-start gap-2.5 text-[12.5px] text-muted-foreground"
@@ -386,7 +437,7 @@ export function ServiceReportDetails({ id }: { id: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.parts.map((p) => (
+                  {report.parts.map((p: any) => (
                     <tr key={p.code} className="border-t border-border">
                       <td className="px-4 py-3.5 text-[12.5px] font-medium">{p.part}</td>
                       <td className="px-4 py-3.5 text-[12.5px] text-muted-foreground">{p.code}</td>
@@ -441,8 +492,34 @@ const kindIcon = {
 
 export function StaffNotifications() {
   const [kind, setKind] = useState("All");
-  const rows = staffNotifications.filter((n) => kind === "All" || n.kind === kind);
-  const unread = staffNotifications.filter((n) => n.unread).length;
+  const { notifications: liveNotifications, loading: notifLoading, markAllRead } = useNotifications();
+
+  const activeNotifications = useMemo(() => {
+    if (!apiEnabled || !liveNotifications) return staffNotifications;
+    return liveNotifications.map((n) => {
+      let staffKind: "Complaint" | "Maintenance" | "Announcement" = "Announcement";
+      if (n.type === "COMPLAINT_UPDATE") staffKind = "Complaint";
+      else if (["WORK_ORDER_UPDATE", "MAINTENANCE_DUE", "PREVENTIVE_DUE"].includes(n.type)) staffKind = "Maintenance";
+
+      return {
+        id: n._id,
+        unread: !n.isRead,
+        kind: staffKind,
+        title: n.title,
+        body: n.message,
+        when: new Date(n.createdAt).toLocaleDateString(),
+        tone: (n.isRead ? "neutral" : "primary") as any,
+        to: n.type === "COMPLAINT_UPDATE" ? "/staff/complaints" : ["WORK_ORDER_UPDATE", "MAINTENANCE_DUE", "PREVENTIVE_DUE"].includes(n.type) ? "/staff/maintenance" : undefined,
+      };
+    });
+  }, [liveNotifications]);
+
+  const rows = useMemo(() => activeNotifications.filter((n) => kind === "All" || n.kind === kind), [activeNotifications, kind]);
+  const unread = useMemo(() => activeNotifications.filter((n) => n.unread).length, [activeNotifications]);
+
+  const complaintCount = useMemo(() => activeNotifications.filter((n) => n.kind === "Complaint").length, [activeNotifications]);
+  const maintenanceCount = useMemo(() => activeNotifications.filter((n) => n.kind === "Maintenance").length, [activeNotifications]);
+  const announcementCount = useMemo(() => activeNotifications.filter((n) => n.kind === "Announcement").length, [activeNotifications]);
 
   const dot: Record<string, string> = {
     neutral: "bg-muted-foreground",
@@ -453,6 +530,14 @@ export function StaffNotifications() {
     violet: "bg-violet",
   };
 
+  if (apiEnabled && notifLoading) {
+    return (
+      <div className="mx-auto max-w-[1400px] flex items-center justify-center py-24 text-muted-foreground">
+        <Loader2 className="mr-3 size-6 animate-spin" /> Loading notifications…
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
       <StaffCrumbs trail={[{ label: "Notifications" }]} />
@@ -461,7 +546,7 @@ export function StaffNotifications() {
         title="Notifications"
         description={`${unread} unread updates across complaints, maintenance, warranty alerts and hospital announcements.`}
         actions={
-          <ActionButton variant="primary" icon={<BellRing className="size-4" />}>
+          <ActionButton variant="primary" icon={<BellRing className="size-4" />} onClick={markAllRead}>
             Mark all as read
           </ActionButton>
         }
@@ -478,21 +563,21 @@ export function StaffNotifications() {
         />
         <StatCard
           label="Complaint updates"
-          value={staffNotifications.filter((n) => n.kind === "Complaint").length}
+          value={complaintCount}
           hint="Status changes"
           tone="primary"
           icon={<CircleAlert className="size-4" />}
         />
         <StatCard
           label="Maintenance"
-          value={staffNotifications.filter((n) => n.kind === "Maintenance").length}
+          value={maintenanceCount}
           hint="Started and completed"
           tone="warning"
           icon={<Wrench className="size-4" />}
         />
         <StatCard
           label="Announcements"
-          value={staffNotifications.filter((n) => n.kind === "Announcement").length}
+          value={announcementCount}
           hint="Hospital-wide"
           tone="violet"
           icon={<Megaphone className="size-4" />}

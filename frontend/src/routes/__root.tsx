@@ -175,9 +175,18 @@ function AuthGate() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isLogin = pathname === "/login";
-  const roleHome: Record<string, string> = { engineer: "/engineer", staff: "/staff" };
+  const roleHome: Record<string, string> = {
+    engineer: "/engineer",
+    staff: "/staff",
+    technician: "/inventory",
+  };
   const scoped = user ? roleHome[user.role] : undefined;
-  const sharedPrefixes = user?.role === "engineer" ? ["/audits", "/maintenance"] : [];
+  const sharedPrefixes =
+    user?.role === "engineer"
+      ? ["/audits", "/maintenance", "/complaints"]
+      : user?.role === "technician"
+        ? ["/inventory", "/purchase-orders"]
+        : [];
   const outOfScope =
     !!scoped && !pathname.startsWith(scoped) && !sharedPrefixes.some((p) => pathname.startsWith(p));
 

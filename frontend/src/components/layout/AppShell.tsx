@@ -213,6 +213,39 @@ const staffQuickActions = [
   { label: "Service reports", to: "/staff/reports" },
 ];
 
+const technicianNav: NavSection[] = [
+  {
+    section: "Inventory Control",
+    items: [
+      {
+        label: "Inventory register",
+        to: "/inventory",
+        icon: Boxes,
+        children: workflow("/inventory", "item"),
+      },
+      {
+        label: "Purchase orders",
+        to: "/purchase-orders",
+        icon: ReceiptText,
+        children: workflow("/purchase-orders", "purchase order"),
+      },
+    ],
+  },
+  {
+    section: "Me",
+    items: [
+      { label: "My profile", to: "/staff/profile", icon: Users },
+      { label: "Settings", to: "/staff/settings", icon: Settings },
+    ],
+  },
+];
+
+const technicianQuickActions = [
+  { label: "Receive stock", to: "/inventory" },
+  { label: "Issue stock", to: "/inventory" },
+  { label: "Raise purchase order", to: "/purchase-orders/new" },
+];
+
 const adminQuickActions = [
   { label: "Register new equipment", to: "/equipment/new" },
   { label: "Raise a complaint", to: "/complaints/new" },
@@ -236,6 +269,8 @@ function useNav() {
   if (user?.role === "engineer")
     return { sections: engineerNav, quickActions: engineerQuickActions };
   if (user?.role === "staff") return { sections: staffNav, quickActions: staffQuickActions };
+  if (user?.role === "technician")
+    return { sections: technicianNav, quickActions: technicianQuickActions };
   return { sections: adminNav, quickActions: adminQuickActions };
 }
 

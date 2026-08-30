@@ -8,6 +8,7 @@ export const serviceReportsApi = {
     status?: string;
     departmentId?: string;
     page?: number;
+    limit?: number;
   }) => get<Paged<ApiServiceReport>>("/service-reports", params),
   get: (id: string) => get<ApiServiceReport>(`/service-reports/${id}`),
   update: (id: string, payload: Partial<ApiServiceReport> & { reviewNote?: string }) =>
