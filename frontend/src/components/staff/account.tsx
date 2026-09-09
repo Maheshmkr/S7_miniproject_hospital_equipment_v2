@@ -59,15 +59,18 @@ export function ServiceReportsList() {
 
   useEffect(() => {
     if (!apiEnabled) return;
-    serviceReportsApi.list({ page: 1, limit: 100 })
+    serviceReportsApi
+      .list({ page: 1, limit: 100 })
       .then((res) => {
         if (res && res.items) {
           const mapped = res.items.map((r: any) => {
-            const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-US", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric"
-            }) : "";
+            const dateStr = r.createdAt
+              ? new Date(r.createdAt).toLocaleDateString("en-US", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "";
             return {
               id: r.serviceReportId || r._id,
               complaintId: r.complaintId?.complaintId || r.complaintId || "",
@@ -77,7 +80,7 @@ export function ServiceReportsList() {
               type: r.maintenanceId?.maintenanceType === "PREVENTIVE" ? "Preventive" : "Corrective",
               summary: r.summary || "",
               findings: r.findings || "",
-              actions: r.actions || []
+              actions: r.actions || [],
             };
           });
           setLiveReports(mapped);
@@ -268,31 +271,50 @@ export function ServiceReportDetails({ id }: { id: string }) {
   useEffect(() => {
     if (!apiEnabled) return;
     setLoading(true);
-    serviceReportsApi.get(id)
+    serviceReportsApi
+      .get(id)
       .then((response) => {
         if (response) {
           const res = response as any;
-          const dateStr = res.createdAt ? new Date(res.createdAt).toLocaleDateString("en-US", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric"
-          }) : "";
+          const dateStr = res.createdAt
+            ? new Date(res.createdAt).toLocaleDateString("en-US", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })
+            : "";
           setLiveReport({
             id: res.serviceReportId || res._id,
-            complaintId: typeof res.complaintId === "object" && res.complaintId ? res.complaintId.complaintId || res.complaintId._id : res.complaintId || "",
-            equipmentId: typeof res.equipmentId === "object" && res.equipmentId ? res.equipmentId.equipmentId || res.equipmentId._id : res.equipmentId || "",
-            engineer: typeof res.engineerId === "object" && res.engineerId ? res.engineerId.name : "Biomedical Engineer",
+            complaintId:
+              typeof res.complaintId === "object" && res.complaintId
+                ? res.complaintId.complaintId || res.complaintId._id
+                : res.complaintId || "",
+            equipmentId:
+              typeof res.equipmentId === "object" && res.equipmentId
+                ? res.equipmentId.equipmentId || res.equipmentId._id
+                : res.equipmentId || "",
+            engineer:
+              typeof res.engineerId === "object" && res.engineerId
+                ? res.engineerId.name
+                : "Biomedical Engineer",
             completed: dateStr,
             type: "Corrective",
             summary: res.correctiveAction || res.engineerRemarks || "",
             findings: res.diagnosticFindings || res.problem || "",
-            actions: res.partsUsed ? res.partsUsed.map((p: any) => `${p.name} (${p.partNo}) x${p.qty}`) : [],
+            actions: res.partsUsed
+              ? res.partsUsed.map((p: any) => `${p.name} (${p.partNo}) x${p.qty}`)
+              : [],
             outcome: res.finalCondition || "Operational",
             timeTaken: "2 h",
             downtime: "2 h",
-            signedBy: typeof res.engineerId === "object" && res.engineerId ? res.engineerId.name : "Biomedical Engineer",
+            signedBy:
+              typeof res.engineerId === "object" && res.engineerId
+                ? res.engineerId.name
+                : "Biomedical Engineer",
             verifiedBy: res.reviewedBy?.name || "Pending Verification",
-            parts: res.partsUsed ? res.partsUsed.map((p: any) => ({ part: p.name, code: p.partNo, qty: p.qty })) : [],
+            parts: res.partsUsed
+              ? res.partsUsed.map((p: any) => ({ part: p.name, code: p.partNo, qty: p.qty }))
+              : [],
           });
         }
       })
@@ -492,14 +514,19 @@ const kindIcon = {
 
 export function StaffNotifications() {
   const [kind, setKind] = useState("All");
-  const { notifications: liveNotifications, loading: notifLoading, markAllRead } = useNotifications();
+  const {
+    notifications: liveNotifications,
+    loading: notifLoading,
+    markAllRead,
+  } = useNotifications();
 
   const activeNotifications = useMemo(() => {
     if (!apiEnabled || !liveNotifications) return staffNotifications;
     return liveNotifications.map((n) => {
       let staffKind: "Complaint" | "Maintenance" | "Announcement" = "Announcement";
       if (n.type === "COMPLAINT_UPDATE") staffKind = "Complaint";
-      else if (["WORK_ORDER_UPDATE", "MAINTENANCE_DUE", "PREVENTIVE_DUE"].includes(n.type)) staffKind = "Maintenance";
+      else if (["WORK_ORDER_UPDATE", "MAINTENANCE_DUE", "PREVENTIVE_DUE"].includes(n.type))
+        staffKind = "Maintenance";
 
       return {
         id: n._id,
@@ -509,17 +536,37 @@ export function StaffNotifications() {
         body: n.message,
         when: new Date(n.createdAt).toLocaleDateString(),
         tone: (n.isRead ? "neutral" : "primary") as any,
-        to: n.type === "COMPLAINT_UPDATE" ? "/staff/complaints" : ["WORK_ORDER_UPDATE", "MAINTENANCE_DUE", "PREVENTIVE_DUE"].includes(n.type) ? "/staff/maintenance" : undefined,
+        to:
+          n.type === "COMPLAINT_UPDATE"
+            ? "/staff/complaints"
+            : ["WORK_ORDER_UPDATE", "MAINTENANCE_DUE", "PREVENTIVE_DUE"].includes(n.type)
+              ? "/staff/maintenance"
+              : undefined,
       };
     });
   }, [liveNotifications]);
 
-  const rows = useMemo(() => activeNotifications.filter((n) => kind === "All" || n.kind === kind), [activeNotifications, kind]);
-  const unread = useMemo(() => activeNotifications.filter((n) => n.unread).length, [activeNotifications]);
+  const rows = useMemo(
+    () => activeNotifications.filter((n) => kind === "All" || n.kind === kind),
+    [activeNotifications, kind],
+  );
+  const unread = useMemo(
+    () => activeNotifications.filter((n) => n.unread).length,
+    [activeNotifications],
+  );
 
-  const complaintCount = useMemo(() => activeNotifications.filter((n) => n.kind === "Complaint").length, [activeNotifications]);
-  const maintenanceCount = useMemo(() => activeNotifications.filter((n) => n.kind === "Maintenance").length, [activeNotifications]);
-  const announcementCount = useMemo(() => activeNotifications.filter((n) => n.kind === "Announcement").length, [activeNotifications]);
+  const complaintCount = useMemo(
+    () => activeNotifications.filter((n) => n.kind === "Complaint").length,
+    [activeNotifications],
+  );
+  const maintenanceCount = useMemo(
+    () => activeNotifications.filter((n) => n.kind === "Maintenance").length,
+    [activeNotifications],
+  );
+  const announcementCount = useMemo(
+    () => activeNotifications.filter((n) => n.kind === "Announcement").length,
+    [activeNotifications],
+  );
 
   const dot: Record<string, string> = {
     neutral: "bg-muted-foreground",
@@ -546,7 +593,11 @@ export function StaffNotifications() {
         title="Notifications"
         description={`${unread} unread updates across complaints, maintenance, warranty alerts and hospital announcements.`}
         actions={
-          <ActionButton variant="primary" icon={<BellRing className="size-4" />} onClick={markAllRead}>
+          <ActionButton
+            variant="primary"
+            icon={<BellRing className="size-4" />}
+            onClick={markAllRead}
+          >
             Mark all as read
           </ActionButton>
         }

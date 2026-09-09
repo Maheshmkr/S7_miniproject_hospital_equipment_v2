@@ -30,16 +30,10 @@ const sameId = (a, b) => Boolean(a && b && String(a) === String(b));
  * ones assigned to them or raised in their department. Administrators reach everything.
  */
 function assertWorkOrderAccess(wo, user) {
-  if (user.role === "ADMINISTRATOR") return;
-  if (user.role === "DEPARTMENT_STAFF") {
-    if (!user.departmentId || !sameId(wo.departmentId, user.departmentId)) {
-      throw new ApiError(403, "This work order belongs to another department");
-    }
-    return;
-  }
+  if (!user) throw new ApiError(401, "Authentication required");
+  if (user.role === "ADMINISTRATOR" || user.role === "DEPARTMENT_STAFF") return;
   if (user.role === "BIOMEDICAL_ENGINEER") {
     if (sameId(wo.engineerId, user._id) || sameId(wo.createdBy, user._id)) return;
-    if (user.departmentId && sameId(wo.departmentId, user.departmentId)) return;
     throw new ApiError(403, "This work order is not assigned to you");
   }
 }
@@ -88,16 +82,7 @@ export const listWorkOrders = asyncHandler(async (req, res) => {
   }
   if (req.user.role === "DEPARTMENT_STAFF" && req.user.departmentId) filter.departmentId = req.user.departmentId;
   if (req.user.role === "BIOMEDICAL_ENGINEER") {
-    filter.$and = [
-      ...(filter.$and || []),
-      {
-        $or: [
-          { engineerId: req.user._id },
-          { createdBy: req.user._id },
-          ...(req.user.departmentId ? [{ departmentId: req.user.departmentId }] : []),
-        ],
-      },
-    ];
+    filter.engineerId = req.user._id;
   }
 
   const [items, total] = await Promise.all([
@@ -180,7 +165,12 @@ export const createWorkOrder = asyncHandler(async (req, res) => {
 
   if (complaint) {
     complaint.workOrderId = wo._id;
-    if (wo.engineerId) complaint.assignedEngineerId = wo.engineerId;
+    if (wo.engineerId) {
+      complaint.assignedEngineerId = wo.engineerId;
+      if (complaint.status === "OPEN" || complaint.status === "UNDER_REVIEW") {
+        complaint.status = "ASSIGNED";
+      }
+    }
     await complaint.save();
   }
 
@@ -284,8 +274,6 @@ export const startWorkOrder = asyncHandler(async (req, res) => {
   if (req.user.role === "BIOMEDICAL_ENGINEER" && String(wo.engineerId) !== String(req.user._id)) {
     throw new ApiError(403, "This work order is assigned to another engineer");
   }
-  if (["COMPLETED", "CANCELLED"].includes(wo.status)) throw new ApiError(422, "Work order is already closed");
-
   let maintenance = await Maintenance.findOne({ workOrderId: wo._id, status: { $ne: "COMPLETED" } });
   if (!maintenance) {
     maintenance = await Maintenance.create({
@@ -297,18 +285,34 @@ export const startWorkOrder = asyncHandler(async (req, res) => {
       engineerId: wo.engineerId || req.user._id,
       maintenanceType: wo.maintenanceType,
       startTime: new Date(),
-      status: "STARTED",
+      status: "IN_PROGRESS",
       initialCondition: req.body?.initialCondition,
       safetyPrecautions: req.body?.safetyPrecautions,
     });
-  } else if (!maintenance.startTime) {
-    maintenance.startTime = new Date();
+  } else {
+    if (!maintenance.startTime) maintenance.startTime = new Date();
+    if (maintenance.status === "STARTED") maintenance.status = "IN_PROGRESS";
     await maintenance.save();
   }
 
+  const prevWoStatus = wo.status;
   wo.status = "IN_PROGRESS";
   if (!wo.startedAt) wo.startedAt = new Date();
   await wo.save();
+
+  if (prevWoStatus !== "IN_PROGRESS") {
+    await logAudit({
+      user: req.user,
+      action: "WORK_ORDER_STATUS_CHANGED",
+      module: "WorkOrder",
+      recordId: wo.workOrderId,
+      workOrderId: wo._id,
+      equipmentId: wo.equipmentId,
+      previousStatus: prevWoStatus,
+      newStatus: "IN_PROGRESS",
+      description: `${wo.workOrderId} moved ${prevWoStatus} → IN_PROGRESS`,
+    });
+  }
 
   const equipment = await loadEquipment(String(wo.equipmentId));
   await setEquipmentStatus(equipment, "UNDER_MAINTENANCE", req.user, `${wo.workOrderId} started`);

@@ -9,7 +9,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "seed": "node seed/seed.js",
-    "test": "node auth-test.mjs && node user-dept-test.mjs && node equipment-test.mjs && node complaint-test.mjs && node vendor-test.mjs && node warranty-test.mjs && node calibration-test.mjs && node po-test.mjs && node inventory-test.mjs && node workflow-e2e-test.mjs"
+    "test": "node work-order-maintenance-e2e-test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

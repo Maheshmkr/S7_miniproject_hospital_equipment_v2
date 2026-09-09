@@ -144,15 +144,30 @@ export function toWorkOrderPayload(
   values: Record<string, string>,
   lookups: { equipmentByName: Record<string, string>; engineersByName: Record<string, string> },
 ): WorkOrderFormPayload {
-  const equipmentId = lookups.equipmentByName[values["equipment"] ?? ""];
-  const engineerId = lookups.engineersByName[values["engineer"] ?? ""];
+  const equipmentId =
+    lookups.equipmentByName[values["equipment"] ?? ""] ||
+    lookups.equipmentByName[values["equipmentId"] ?? ""] ||
+    values["equipmentId"] ||
+    values["equipment"];
+  const engineerId =
+    lookups.engineersByName[values["engineer"] ?? ""] ||
+    lookups.engineersByName[values["assignee"] ?? ""] ||
+    lookups.engineersByName[values["engineerId"] ?? ""] ||
+    values["engineerId"] ||
+    values["engineer"] ||
+    values["assignee"];
   const hours = Number(values["duration"]);
   return {
-    title: values["task"] ?? "",
-    description: values["checklist"] ?? "",
-    maintenanceType: TYPE_MAP[(values["type"] ?? "").toLowerCase()] ?? "CORRECTIVE",
-    ...(values["date"] ? { scheduledDate: values["date"] } : {}),
-    ...(Number.isFinite(hours) && values["duration"] ? { estimatedHours: hours } : {}),
+    title: values["task"] ?? values["title"] ?? "",
+    description: values["checklist"] ?? values["description"] ?? "",
+    maintenanceType:
+      TYPE_MAP[(values["type"] ?? values["maintenanceType"] ?? "").toLowerCase()] ?? "CORRECTIVE",
+    ...(values["date"] || values["scheduledDate"]
+      ? { scheduledDate: values["date"] || values["scheduledDate"] }
+      : {}),
+    ...(Number.isFinite(hours) && (values["duration"] || values["estimatedHours"])
+      ? { estimatedHours: hours }
+      : {}),
     ...(equipmentId ? { equipmentId } : {}),
     ...(engineerId ? { engineerId } : {}),
   };

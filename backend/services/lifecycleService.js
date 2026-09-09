@@ -5,12 +5,21 @@ import { logAudit } from "./auditService.js";
 
 /** Generate the next sequential business code for a collection. */
 export async function nextCode(Model, field, prefix, pad = 4) {
-  const last = await Model.findOne({ [field]: new RegExp(`^${prefix}`) })
-    .sort({ [field]: -1 })
+  const docs = await Model.find({ [field]: new RegExp(`^${prefix}`) })
     .select(field)
     .lean();
-  const lastNum = last ? Number.parseInt(String(last[field]).replace(/\D/g, ""), 10) : 0;
-  return `${prefix}${String(lastNum + 1).padStart(pad, "0")}`;
+  let maxNum = 0;
+  for (const doc of docs) {
+    const raw = String(doc[field] || "");
+    if (raw.startsWith(prefix)) {
+      const suffix = raw.slice(prefix.length);
+      const num = Number.parseInt(suffix, 10);
+      if (!Number.isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+  return `${prefix}${String(maxNum + 1).padStart(pad, "0")}`;
 }
 
 export async function setEquipmentStatus(equipment, status, user, description) {
@@ -35,13 +44,19 @@ export async function setEquipmentStatus(equipment, status, user, description) {
 export async function setComplaintStatus(complaint, status, user, { force = false } = {}) {
   if (!complaint) return null;
   const previous = complaint.status;
-  if (previous === status) return complaint;
+  if (previous === status) {
+    if (status === "RESOLVED" && !complaint.resolvedAt) {
+      complaint.resolvedAt = new Date();
+      await complaint.save();
+    }
+    return complaint;
+  }
   const allowed = COMPLAINT_TRANSITIONS[previous] || [];
   if (!force && !allowed.includes(status)) {
     throw new ApiError(422, `Complaint cannot move ${previous} → ${status}`);
   }
   complaint.status = status;
-  if (status === "RESOLVED") complaint.resolvedAt = new Date();
+  if (status === "RESOLVED" && !complaint.resolvedAt) complaint.resolvedAt = new Date();
   await complaint.save();
   await logAudit({
     user,

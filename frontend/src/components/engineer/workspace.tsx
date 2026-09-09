@@ -92,9 +92,15 @@ export function TaskCard({ t }: { t: EngineerTask }) {
 /** Card for a live ApiWorkOrder from MongoDB. */
 export function WorkOrderCard({ wo }: { wo: ApiWorkOrder }) {
   const equipName =
-    typeof wo.equipmentId === "object" ? wo.equipmentId.name : String(wo.equipmentId);
+    wo.equipmentId && typeof wo.equipmentId === "object"
+      ? wo.equipmentId.name
+      : wo.equipmentId
+        ? String(wo.equipmentId)
+        : "—";
   const deptName =
-    typeof wo.departmentId === "object" ? wo.departmentId.name : (wo.departmentId ?? "-");
+    wo.departmentId && typeof wo.departmentId === "object"
+      ? wo.departmentId.name
+      : (wo.departmentId ?? "-");
   const priorityMap: Record<string, "danger" | "warning" | "primary" | "neutral"> = {
     CRITICAL: "danger",
     HIGH: "warning",
@@ -106,7 +112,11 @@ export function WorkOrderCard({ wo }: { wo: ApiWorkOrder }) {
     IN_PROGRESS: "primary",
     AWAITING_PARTS: "warning",
     ASSIGNED: "neutral",
+    UNDER_VERIFICATION: "primary",
   };
+  const progress = wo.status === "COMPLETED" ? 100 : wo.status === "IN_PROGRESS" ? 50 : 15;
+  const slot = wo.scheduledDate ? new Date(wo.scheduledDate).toLocaleDateString() : "Today";
+
   return (
     <Link to="/engineer/tasks/$id" params={{ id: wo._id }} className="block">
       <Panel className="h-full">
@@ -126,9 +136,18 @@ export function WorkOrderCard({ wo }: { wo: ApiWorkOrder }) {
           <div className="flex flex-wrap items-center gap-2">
             <Pill tone={statusMap[wo.status] ?? "neutral"}>{wo.status.replace("_", " ")}</Pill>
             <Pill tone="neutral">{wo.maintenanceType}</Pill>
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+              <Clock className="size-3.5" /> {slot}
+            </span>
           </div>
-          <div className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-            <MapPin className="size-3.5" /> {deptName}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="size-3.5" /> {deptName}
+              </span>
+              <span className="font-semibold tabular-nums text-foreground">{progress}%</span>
+            </div>
+            <Meter value={progress} tone={progress === 100 ? "success" : "primary"} />
           </div>
         </div>
       </Panel>
@@ -427,13 +446,17 @@ export function AssignedTasks() {
   const rows = (workOrders ?? []).filter((wo) => {
     const matchStatus = statusFilter === "All" || wo.status === statusFilter;
     const equipName =
-      typeof wo.equipmentId === "object"
+      wo.equipmentId && typeof wo.equipmentId === "object"
         ? (wo.equipmentId as { name?: string }).name
-        : String(wo.equipmentId);
+        : wo.equipmentId
+          ? String(wo.equipmentId)
+          : "";
     const deptName =
-      typeof wo.departmentId === "object"
+      wo.departmentId && typeof wo.departmentId === "object"
         ? (wo.departmentId as { name?: string }).name
-        : (wo.departmentId ?? "");
+        : wo.departmentId
+          ? String(wo.departmentId)
+          : "";
     const matchQuery = (wo.title + wo.workOrderId + (equipName ?? "") + (deptName ?? ""))
       .toLowerCase()
       .includes(query.toLowerCase());
@@ -540,17 +563,19 @@ export function AssignedTasks() {
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-10 text-center text-[13px] text-muted-foreground">
-                      No work orders found
+                      No assigned tasks available
                     </td>
                   </tr>
                 ) : (
                   rows.map((wo) => {
                     const equipName =
-                      typeof wo.equipmentId === "object"
+                      wo.equipmentId && typeof wo.equipmentId === "object"
                         ? wo.equipmentId.name
-                        : String(wo.equipmentId);
+                        : wo.equipmentId
+                          ? String(wo.equipmentId)
+                          : "—";
                     const deptName =
-                      typeof wo.departmentId === "object"
+                      wo.departmentId && typeof wo.departmentId === "object"
                         ? wo.departmentId.name
                         : (wo.departmentId ?? "-");
                     const pTone: Record<string, "danger" | "warning" | "primary" | "neutral"> = {
@@ -644,17 +669,23 @@ export function TaskDetails({ id }: { id: string }) {
   }
 
   const equipName =
-    typeof workOrder.equipmentId === "object"
+    workOrder.equipmentId && typeof workOrder.equipmentId === "object"
       ? workOrder.equipmentId.name
-      : String(workOrder.equipmentId);
+      : workOrder.equipmentId
+        ? String(workOrder.equipmentId)
+        : "—";
   const equipId =
-    typeof workOrder.equipmentId === "object" ? workOrder.equipmentId._id : workOrder.equipmentId;
+    workOrder.equipmentId && typeof workOrder.equipmentId === "object"
+      ? workOrder.equipmentId._id
+      : workOrder.equipmentId
+        ? String(workOrder.equipmentId)
+        : "";
   const deptName =
-    typeof workOrder.departmentId === "object"
+    workOrder.departmentId && typeof workOrder.departmentId === "object"
       ? workOrder.departmentId.name
       : (workOrder.departmentId ?? "-");
   const engineerName =
-    typeof workOrder.engineerId === "object"
+    workOrder.engineerId && typeof workOrder.engineerId === "object"
       ? workOrder.engineerId.name
       : (workOrder.engineerId ?? "Unassigned");
   const priorityMap: Record<string, "danger" | "warning" | "primary" | "neutral"> = {

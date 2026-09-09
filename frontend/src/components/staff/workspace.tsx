@@ -94,7 +94,9 @@ function useStaffDashboardAnalytics() {
     analyticsApi
       .dashboard()
       .then(setData)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load dashboard data"))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed to load dashboard data"),
+      )
       .finally(() => setLoading(false));
   }, []);
 
@@ -103,8 +105,12 @@ function useStaffDashboardAnalytics() {
 
 export function StaffDashboard() {
   const { data: analytics, loading: analyticsLoading } = useStaffDashboardAnalytics();
-  const { total: liveComplaintsCount } = useComplaintList(apiEnabled ? { status: "OPEN" } : { limit: 0 });
-  const { total: liveCompletedCount } = useComplaintList(apiEnabled ? { status: "RESOLVED" } : { limit: 0 });
+  const { total: liveComplaintsCount } = useComplaintList(
+    apiEnabled ? { status: "OPEN" } : { limit: 0 },
+  );
+  const { total: liveCompletedCount } = useComplaintList(
+    apiEnabled ? { status: "RESOLVED" } : { limit: 0 },
+  );
   const { total: liveMaintenanceCount } = useMaintenanceList(apiEnabled ? {} : { limit: 0 });
   const { items: liveEquipment } = useEquipmentList(apiEnabled ? {} : { limit: 0 });
 
@@ -115,11 +121,14 @@ export function StaffDashboard() {
     const maintenance = analytics.underMaintenance + analytics.breakdown;
     const open = liveComplaintsCount ?? analytics.openComplaints;
     const completed = liveCompletedCount ?? analytics.resolvedComplaints;
-    const upcoming = liveMaintenanceCount ?? (analytics.workOrders - analytics.completedWorkOrders);
-    
-    const health = analytics.healthTrend && analytics.healthTrend.length > 0
-      ? analytics.healthTrend[analytics.healthTrend.length - 1].health
-      : total > 0 ? Math.round((active / total) * 100) : 100;
+    const upcoming = liveMaintenanceCount ?? analytics.workOrders - analytics.completedWorkOrders;
+
+    const health =
+      analytics.healthTrend && analytics.healthTrend.length > 0
+        ? analytics.healthTrend[analytics.healthTrend.length - 1].health
+        : total > 0
+          ? Math.round((active / total) * 100)
+          : 100;
 
     return {
       total,
@@ -128,18 +137,19 @@ export function StaffDashboard() {
       open,
       completed,
       upcoming,
-      health
+      health,
     };
   }, [analytics, liveComplaintsCount, liveCompletedCount, liveMaintenanceCount]);
 
-  const activeHealthTrend = apiEnabled && analytics?.healthTrend ? analytics.healthTrend : staffHealthTrend;
-  
+  const activeHealthTrend =
+    apiEnabled && analytics?.healthTrend ? analytics.healthTrend : staffHealthTrend;
+
   const activeComplaintTrend = useMemo(() => {
     if (apiEnabled && analytics?.complaintFlow) {
       return analytics.complaintFlow.map((f, idx) => ({
         week: `Wk ${idx + 1}`,
         raised: f.raised,
-        resolved: f.resolved
+        resolved: f.resolved,
       }));
     }
     return staffComplaintTrend;
@@ -436,7 +446,9 @@ export function StaffEquipmentWorkspace() {
   const [category, setCategory] = useState("All");
   const [view, setView] = useState<"table" | "cards">("table");
 
-  const { items: liveEquipment, loading: equipLoading } = useEquipmentList(apiEnabled ? {} : { limit: 0 });
+  const { items: liveEquipment, loading: equipLoading } = useEquipmentList(
+    apiEnabled ? {} : { limit: 0 },
+  );
 
   const displayEquipment = useMemo(() => {
     if (!apiEnabled || !liveEquipment) return staffEquipment;
@@ -452,7 +464,8 @@ export function StaffEquipmentWorkspace() {
         name: e.name,
         category: e.category,
         manufacturer: e.manufacturer || "Unknown",
-        dept: typeof e.departmentId === "object" && e.departmentId ? e.departmentId.name : "Radiology",
+        dept:
+          typeof e.departmentId === "object" && e.departmentId ? e.departmentId.name : "Radiology",
         location: e.location || "Main Clinic",
         status: staffStatus,
         health: e.healthScore ?? 100,
@@ -461,14 +474,20 @@ export function StaffEquipmentWorkspace() {
         amc: "Comprehensive",
         amcStatus: "Comprehensive" as const,
         purchased: e.purchaseDate ? new Date(e.purchaseDate).toLocaleDateString() : "10 Jan 2022",
-        installed: e.installationDate ? new Date(e.installationDate).toLocaleDateString() : "12 Jan 2022",
+        installed: e.installationDate
+          ? new Date(e.installationDate).toLocaleDateString()
+          : "12 Jan 2022",
         lastService: "03 Mar 2026",
-        nextService: e.nextPreventiveDate ? new Date(e.nextPreventiveDate).toLocaleDateString() : "03 Sep 2026",
+        nextService: e.nextPreventiveDate
+          ? new Date(e.nextPreventiveDate).toLocaleDateString()
+          : "03 Sep 2026",
         specs: {
           model: e.model || "Standard",
           serial: e.serialNumber || "SN-1000",
           manufactured: "2021",
-          installed: e.installationDate ? new Date(e.installationDate).toLocaleDateString() : "12 Jan 2022",
+          installed: e.installationDate
+            ? new Date(e.installationDate).toLocaleDateString()
+            : "12 Jan 2022",
           location: e.location || "Main Clinic",
           owner: "Hospital",
           power: "240V",
@@ -478,7 +497,9 @@ export function StaffEquipmentWorkspace() {
           riskClass: e.criticality || "High",
           usageHours: "1,240 h",
           lastService: "03 Mar 2026",
-          nextService: e.nextPreventiveDate ? new Date(e.nextPreventiveDate).toLocaleDateString() : "03 Sep 2026",
+          nextService: e.nextPreventiveDate
+            ? new Date(e.nextPreventiveDate).toLocaleDateString()
+            : "03 Sep 2026",
           amc: "Active",
           compliance: "100%",
         },
@@ -515,8 +536,11 @@ export function StaffEquipmentWorkspace() {
   const stats = useMemo(() => {
     const total = displayEquipment.length;
     const active = displayEquipment.filter((e) => e.status === "Operational").length;
-    const maintenance = displayEquipment.filter((e) => e.status === "Under Maintenance" || e.status === "Critical").length;
-    const health = total > 0 ? Math.round(displayEquipment.reduce((a, e) => a + e.health, 0) / total) : 100;
+    const maintenance = displayEquipment.filter(
+      (e) => e.status === "Under Maintenance" || e.status === "Critical",
+    ).length;
+    const health =
+      total > 0 ? Math.round(displayEquipment.reduce((a, e) => a + e.health, 0) / total) : 100;
     return { total, active, maintenance, health };
   }, [displayEquipment]);
 
@@ -791,22 +815,40 @@ export function StaffEquipmentDetails({ id }: { id: string }) {
       name: liveAsset.name,
       category: liveAsset.category,
       manufacturer: liveAsset.manufacturer || "Unknown",
-      dept: typeof liveAsset.departmentId === "object" && liveAsset.departmentId ? liveAsset.departmentId.name : "Radiology",
+      dept:
+        typeof liveAsset.departmentId === "object" && liveAsset.departmentId
+          ? liveAsset.departmentId.name
+          : "Radiology",
       location: liveAsset.location || "Main Clinic",
-      status: liveAsset.status === "OPERATIONAL" ? "Operational" : liveAsset.status === "UNDER_MAINTENANCE" ? "Under Maintenance" : liveAsset.status === "UNDER_BREAKDOWN" || liveAsset.status === "CRITICAL" ? "Critical" : "Idle" as const,
+      status:
+        liveAsset.status === "OPERATIONAL"
+          ? "Operational"
+          : liveAsset.status === "UNDER_MAINTENANCE"
+            ? "Under Maintenance"
+            : liveAsset.status === "UNDER_BREAKDOWN" || liveAsset.status === "CRITICAL"
+              ? "Critical"
+              : ("Idle" as const),
       health: liveAsset.healthScore ?? 100,
-      warranty: liveAsset.warrantyExpiry ? new Date(liveAsset.warrantyExpiry).toLocaleDateString() : "Active",
+      warranty: liveAsset.warrantyExpiry
+        ? new Date(liveAsset.warrantyExpiry).toLocaleDateString()
+        : "Active",
       warrantyStatus: "Active" as const,
       amcStatus: "Comprehensive" as const,
-      nextService: liveAsset.nextPreventiveDate ? new Date(liveAsset.nextPreventiveDate).toLocaleDateString() : "03 Sep 2026",
+      nextService: liveAsset.nextPreventiveDate
+        ? new Date(liveAsset.nextPreventiveDate).toLocaleDateString()
+        : "03 Sep 2026",
       specs: {
         model: liveAsset.model || "Unknown",
         serial: liveAsset.serialNumber || "Unknown",
         power: "220V",
         weight: "12 kg",
       },
-      purchased: liveAsset.purchaseDate ? new Date(liveAsset.purchaseDate).toLocaleDateString() : "01 Jan 2024",
-      installed: liveAsset.installationDate ? new Date(liveAsset.installationDate).toLocaleDateString() : "01 Jan 2024",
+      purchased: liveAsset.purchaseDate
+        ? new Date(liveAsset.purchaseDate).toLocaleDateString()
+        : "01 Jan 2024",
+      installed: liveAsset.installationDate
+        ? new Date(liveAsset.installationDate).toLocaleDateString()
+        : "01 Jan 2024",
       amc: "Comprehensive AMC",
       lastService: "01 Jun 2026",
       timeline: [],
@@ -815,10 +857,12 @@ export function StaffEquipmentDetails({ id }: { id: string }) {
     };
   }, [liveAsset, id]);
 
-  const complaintQuery = apiEnabled && liveAsset?._id ? { equipmentId: liveAsset._id } : { limit: 0 };
+  const complaintQuery =
+    apiEnabled && liveAsset?._id ? { equipmentId: liveAsset._id } : { limit: 0 };
   const { items: liveComplaints } = useComplaintList(complaintQuery);
 
-  const maintenanceQuery = apiEnabled && liveAsset?._id ? { equipmentId: liveAsset._id } : { limit: 0 };
+  const maintenanceQuery =
+    apiEnabled && liveAsset?._id ? { equipmentId: liveAsset._id } : { limit: 0 };
   const { items: liveMaintenance } = useMaintenanceList(maintenanceQuery);
 
   const linkedComplaints = useMemo(() => {
@@ -839,27 +883,45 @@ export function StaffEquipmentDetails({ id }: { id: string }) {
         title: c.title,
         equipmentId: liveAsset?.equipmentId || "",
         category: "Software" as const,
-        priority: (c.priority === "CRITICAL" ? "Critical" : c.priority === "HIGH" ? "High" : c.priority === "LOW" ? "Low" : "Medium") as StaffComplaint["priority"],
+        priority: (c.priority === "CRITICAL"
+          ? "Critical"
+          : c.priority === "HIGH"
+            ? "High"
+            : c.priority === "LOW"
+              ? "Low"
+              : "Medium") as StaffComplaint["priority"],
         description: c.description,
         status: staffStatus,
         progress: c.status === "RESOLVED" || c.status === "CLOSED" ? 100 : 30,
-        engineer: typeof c.assignedEngineerId === "object" && c.assignedEngineerId ? c.assignedEngineerId.name : "Unassigned",
+        engineer:
+          typeof c.assignedEngineerId === "object" && c.assignedEngineerId
+            ? c.assignedEngineerId.name
+            : "Unassigned",
         reportedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
         created: new Date(c.createdAt).toLocaleDateString(),
         updated: new Date(c.updatedAt || c.createdAt).toLocaleDateString(),
         expected: "1 working day",
         raisedBy: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.name : "Staff",
-        contact: typeof c.reportedBy === "object" && c.reportedBy ? c.reportedBy.email || "Staff" : "Staff",
-        stage: c.status === "OPEN" ? "Submitted" : c.status === "ASSIGNED" ? "Scheduled" : "In Progress",
+        contact:
+          typeof c.reportedBy === "object" && c.reportedBy
+            ? c.reportedBy.email || "Staff"
+            : "Staff",
+        stage:
+          c.status === "OPEN" ? "Submitted" : c.status === "ASSIGNED" ? "Scheduled" : "In Progress",
         parts: [],
         remarks: c.resolution || "",
         notes: [],
         messages: [],
         photos: [],
         attachments: [],
-        symptoms: c.description.includes("Symptoms:") ? c.description.split("Symptoms:")[1].split(",").map((s: string) => s.trim()) : [],
+        symptoms: c.description.includes("Symptoms:")
+          ? c.description
+              .split("Symptoms:")[1]
+              .split(",")
+              .map((s: string) => s.trim())
+          : [],
         timeline: [],
-        reportId: c.workOrderId ? String(c.workOrderId) : undefined
+        reportId: c.workOrderId ? String(c.workOrderId) : undefined,
       };
     });
   }, [liveComplaints, liveAsset, asset]);
@@ -872,11 +934,20 @@ export function StaffEquipmentDetails({ id }: { id: string }) {
       return {
         id: m.maintenanceId || m._id,
         equipmentId: liveAsset?.equipmentId || "",
-        type: m.maintenanceType === "PREVENTIVE" ? ("Preventive" as const) : ("Corrective" as const),
+        type:
+          m.maintenanceType === "PREVENTIVE" ? ("Preventive" as const) : ("Corrective" as const),
         stage: m.status === "COMPLETED" ? "Verification" : "In Progress",
-        status: m.status === "COMPLETED" ? ("Completed" as const) : m.status === "AWAITING_PARTS" ? ("Awaiting Parts" as const) : m.status === "SCHEDULED" ? ("Scheduled" as const) : ("In Progress" as const),
+        status:
+          m.status === "COMPLETED"
+            ? ("Completed" as const)
+            : m.status === "AWAITING_PARTS"
+              ? ("Awaiting Parts" as const)
+              : m.status === "SCHEDULED"
+                ? ("Scheduled" as const)
+                : ("In Progress" as const),
         progress: m.status === "COMPLETED" ? 100 : 50,
-        engineer: typeof m.engineerId === "object" && m.engineerId ? m.engineerId.name : "Unassigned",
+        engineer:
+          typeof m.engineerId === "object" && m.engineerId ? m.engineerId.name : "Unassigned",
         started: m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "",
         expected: "Today",
         timeline: [],
@@ -1230,10 +1301,13 @@ export function StaffDepartmentProfile() {
     const open = analytics.openComplaints;
     const completed = analytics.resolvedComplaints;
     const upcoming = analytics.workOrders - analytics.completedWorkOrders;
-    
-    const health = analytics.healthTrend && analytics.healthTrend.length > 0
-      ? analytics.healthTrend[analytics.healthTrend.length - 1].health
-      : total > 0 ? Math.round((active / total) * 100) : 100;
+
+    const health =
+      analytics.healthTrend && analytics.healthTrend.length > 0
+        ? analytics.healthTrend[analytics.healthTrend.length - 1].health
+        : total > 0
+          ? Math.round((active / total) * 100)
+          : 100;
 
     return {
       total,
@@ -1242,7 +1316,7 @@ export function StaffDepartmentProfile() {
       open,
       completed,
       upcoming,
-      health
+      health,
     };
   }, [analytics]);
 

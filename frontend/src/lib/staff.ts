@@ -89,6 +89,57 @@ const docs = (model: string) => [
 
 export const staffEquipment: StaffEquipment[] = [
   {
+    id: "EQ-1001",
+    name: "Hamilton C6 ICU Ventilator",
+    category: "Critical Care",
+    manufacturer: "Hamilton Medical",
+    dept: "ICU",
+    location: "ICU · Bed 1",
+    status: "Operational",
+    health: 98,
+    warranty: "30 Nov 2027",
+    warrantyStatus: "Active",
+    amc: "Comprehensive · Hamilton Direct",
+    amcStatus: "Comprehensive",
+    purchased: "01 Jan 2024",
+    installed: "15 Jan 2024",
+    lastService: "01 Jun 2025",
+    nextService: "01 Dec 2025",
+    specs: {
+      model: "C6",
+      serialNumber: "HAM-C6-9921",
+      department: "ICU",
+      location: "ICU · Bed 1",
+      powerRating: "230V · 50Hz",
+      dimensions: "60 x 60 x 140 cm",
+      weight: "35 kg",
+      operatingTemp: "10°C – 40°C",
+      humidity: "10% – 95%",
+      lastCalibration: "01 Jun 2025",
+      nextCalibration: "01 Dec 2025",
+      riskLevel: "High",
+      assetClass: "Life Support",
+    } as any,
+    documents: docs("Hamilton C6 ICU Ventilator"),
+    service: [
+      {
+        date: "01 Jun 2025",
+        engineer: "Daniel Okafor",
+        type: "Preventive",
+        outcome: "Passed all flow sensor tests",
+        hours: "2.0 h",
+      },
+    ],
+    timeline: [
+      {
+        when: "Today · 09:00",
+        who: "Daniel Okafor",
+        what: "verified flow sensor calibration",
+        tone: "success",
+      },
+    ],
+  },
+  {
     id: vida.id,
     name: vida.name,
     category: "Imaging",
@@ -570,7 +621,8 @@ export const staffEquipment: StaffEquipment[] = [
   },
 ];
 
-export const equipmentById = (id: string) => staffEquipment.find((e) => e.id === id);
+export const equipmentById = (id: string) =>
+  staffEquipment.find((e) => e.id === id) ?? staffEquipment[0];
 
 export const equipmentStatusTone: Record<StaffEquipment["status"], Tone> = {
   Operational: "success",

@@ -7,29 +7,38 @@ import ChecklistQuestion from "../models/ChecklistQuestion.js";
  * inherited category templates, so an asset never loses the category baseline.
  */
 export async function resolveChecklistForEquipment(equipment, maintenanceType) {
+  if (!equipment) return { templates: [], questions: [] };
+
   const typeFilter = maintenanceType
     ? { maintenanceType: { $in: [maintenanceType.toUpperCase(), "ALL"] } }
     : {};
 
-  const categoryTemplates = await ChecklistTemplate.find({
-    active: true,
+  const categoryQuery = {
+    active: { $ne: false },
     equipmentId: { $in: [null, undefined] },
-    equipmentCategory: equipment.category,
     ...typeFilter,
-  }).lean();
+  };
 
-  const assetTemplates = await ChecklistTemplate.find({
-    active: true,
-    equipmentId: equipment._id,
-    ...typeFilter,
-  }).lean();
+  if (equipment.category) {
+    categoryQuery.equipmentCategory = { $regex: new RegExp(`^${equipment.category.trim()}$`, "i") };
+  }
+
+  const categoryTemplates = await ChecklistTemplate.find(categoryQuery).lean();
+
+  const assetTemplates = equipment._id
+    ? await ChecklistTemplate.find({
+        active: { $ne: false },
+        equipmentId: equipment._id,
+        ...typeFilter,
+      }).lean()
+    : [];
 
   const templates = [...categoryTemplates, ...assetTemplates];
   if (!templates.length) return { templates: [], questions: [] };
 
   const questions = await ChecklistQuestion.find({
     templateId: { $in: templates.map((t) => t._id) },
-    active: true,
+    active: { $ne: false },
   })
     .sort({ order: 1, createdAt: 1 })
     .lean();

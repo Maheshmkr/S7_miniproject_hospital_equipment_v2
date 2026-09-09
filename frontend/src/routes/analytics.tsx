@@ -67,12 +67,16 @@ const pieColors = ["var(--chart-1)", "var(--chart-5)", "var(--chart-2)", "var(--
 
 function Analytics() {
   const { data: liveData } = useDashboardAnalytics();
-  
-  const activeHealthTrend = apiEnabled && liveData?.healthTrend ? liveData.healthTrend : mockHealthTrend;
+
+  const activeHealthTrend =
+    apiEnabled && liveData?.healthTrend ? liveData.healthTrend : mockHealthTrend;
   const activeCostSplit = apiEnabled && liveData?.costSplit ? liveData.costSplit : mockCostSplit;
-  const activeComplaintFlow = apiEnabled && liveData?.complaintFlow ? liveData.complaintFlow : mockComplaintFlow;
-  const activeDepartments = apiEnabled && liveData?.departments ? liveData.departments : mockDepartments;
-  const activeCategories = apiEnabled && liveData?.categories ? liveData.categories : mockCategories;
+  const activeComplaintFlow =
+    apiEnabled && liveData?.complaintFlow ? liveData.complaintFlow : mockComplaintFlow;
+  const activeDepartments =
+    apiEnabled && liveData?.departments ? liveData.departments : mockDepartments;
+  const activeCategories =
+    apiEnabled && liveData?.categories ? liveData.categories : mockCategories;
 
   const kpiItems = [
     {
@@ -150,7 +154,10 @@ function Analytics() {
           />
           <div className="h-[280px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={activeHealthTrend} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
+              <AreaChart
+                data={activeHealthTrend}
+                margin={{ top: 10, right: 24, left: 0, bottom: 0 }}
+              >
                 <defs>
                   <linearGradient id="aH" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.32} />

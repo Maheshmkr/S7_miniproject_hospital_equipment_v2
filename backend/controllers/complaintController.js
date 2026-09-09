@@ -1,6 +1,7 @@
 import Complaint, { COMPLAINT_STATUSES, COMPLAINT_TRANSITIONS, PRIORITIES } from "../models/Complaint.js";
 import Equipment from "../models/Equipment.js";
 import User from "../models/User.js";
+import WorkOrder from "../models/WorkOrder.js";
 import AuditLog from "../models/AuditLog.js";
 import { ApiError, asyncHandler, created, ok } from "../services/apiError.js";
 import { assertDate, assertEnum, findByAnyId, paginate, requireFields } from "../services/validate.js";
@@ -21,17 +22,7 @@ const sameId = (a, b) => Boolean(a && b && String(a) === String(b));
  * ones assigned to them (or that they raised). Administrators reach everything.
  */
 function assertComplaintAccess(complaint, user) {
-  if (user.role === "ADMINISTRATOR") return;
-  if (user.role === "DEPARTMENT_STAFF") {
-    if (!user.departmentId || !sameId(complaint.departmentId, user.departmentId)) {
-      throw new ApiError(403, "This complaint belongs to another department");
-    }
-    return;
-  }
-  if (user.role === "BIOMEDICAL_ENGINEER") {
-    if (sameId(complaint.assignedEngineerId, user._id) || sameId(complaint.reportedBy, user._id)) return;
-    throw new ApiError(403, "This complaint is not assigned to you");
-  }
+  if (!user) throw new ApiError(401, "Authentication required");
 }
 
 /** Fields a caller may change through PUT — never ids, reporter or status. */
@@ -57,13 +48,6 @@ export const listComplaints = asyncHandler(async (req, res) => {
       { title: new RegExp(search, "i") },
       { complaintId: new RegExp(search, "i") },
       { description: new RegExp(search, "i") },
-    ];
-  }
-  if (req.user.role === "DEPARTMENT_STAFF" && req.user.departmentId) filter.departmentId = req.user.departmentId;
-  if (req.user.role === "BIOMEDICAL_ENGINEER") {
-    filter.$and = [
-      ...(filter.$and || []),
-      { $or: [{ assignedEngineerId: req.user._id }, { reportedBy: req.user._id }] },
     ];
   }
 
@@ -99,14 +83,12 @@ export const createComplaint = asyncHandler(async (req, res) => {
   assertEnum(req.body.priority, PRIORITIES, "priority");
   const equipment = await loadEquipment(req.body.equipmentId);
 
-  // Staff may only raise tickets for their own department, and never spoof the reporter.
-  let departmentId = req.body.departmentId || equipment.departmentId;
-  if (req.user.role === "DEPARTMENT_STAFF") {
-    if (!req.user.departmentId) throw new ApiError(403, "Your account is not linked to a department");
-    if (equipment.departmentId && !sameId(equipment.departmentId, req.user.departmentId)) {
-      throw new ApiError(403, "This equipment belongs to another department");
-    }
-    departmentId = req.user.departmentId;
+  const departmentId = equipment.departmentId || req.body.departmentId || req.user.departmentId;
+
+  const engineerId = req.body.engineerId || req.body.assignedEngineerId;
+  let engineer = null;
+  if (engineerId) {
+    engineer = await User.findById(engineerId);
   }
 
   const complaint = await Complaint.create({
@@ -114,11 +96,31 @@ export const createComplaint = asyncHandler(async (req, res) => {
     equipmentId: equipment._id,
     departmentId,
     reportedBy: req.user._id,
+    assignedEngineerId: engineer ? engineer._id : undefined,
     title: req.body.title,
     description: req.body.description,
     priority: req.body.priority || "MEDIUM",
-    status: "OPEN",
+    status: engineer ? "ASSIGNED" : "OPEN",
   });
+
+  if (engineer) {
+    const wo = await WorkOrder.create({
+      workOrderId: await nextCode(WorkOrder, "workOrderId", "WO-", 4),
+      title: `Investigate: ${complaint.title}`,
+      equipmentId: complaint.equipmentId,
+      complaintId: complaint._id,
+      departmentId: complaint.departmentId,
+      engineerId: engineer._id,
+      maintenanceType: "CORRECTIVE",
+      priority: complaint.priority || "MEDIUM",
+      status: "ASSIGNED",
+      scheduledDate: new Date(),
+      description: complaint.description || complaint.title,
+      createdBy: req.user._id,
+    });
+    complaint.workOrderId = wo._id;
+    await complaint.save();
+  }
 
   if (["CRITICAL", "HIGH"].includes(complaint.priority)) {
     await setEquipmentStatus(equipment, "UNDER_BREAKDOWN", req.user, `Breakdown reported via ${complaint.complaintId}`);
@@ -129,6 +131,7 @@ export const createComplaint = asyncHandler(async (req, res) => {
     { path: "departmentId", select: "name code" },
     { path: "assignedEngineerId", select: "name initials" },
     { path: "reportedBy", select: "name" },
+    { path: "workOrderId", select: "workOrderId title status" },
   ]);
 
   await logAudit({
@@ -137,7 +140,7 @@ export const createComplaint = asyncHandler(async (req, res) => {
     module: "Complaint",
     recordId: complaint.complaintId,
     equipmentId: equipment._id,
-    newStatus: "OPEN",
+    newStatus: complaint.status,
     description: `${complaint.complaintId} · ${complaint.title}`,
   });
   return created(res, complaint);
@@ -153,12 +156,51 @@ export const updateComplaint = asyncHandler(async (req, res) => {
   for (const field of EDITABLE) {
     if (req.body[field] !== undefined) complaint[field] = req.body[field];
   }
+  const engineerId = req.body.engineerId || req.body.assignedEngineerId;
+  if (engineerId) {
+    const engineer = await User.findById(engineerId);
+    if (engineer && engineer.role === "BIOMEDICAL_ENGINEER") {
+      complaint.assignedEngineerId = engineer._id;
+      if (complaint.status === "OPEN" || complaint.status === "UNDER_REVIEW") {
+        complaint.status = "ASSIGNED";
+      }
+      let wo = null;
+      if (complaint.workOrderId) {
+        wo = await WorkOrder.findById(complaint.workOrderId);
+      }
+      if (!wo) {
+        wo = await WorkOrder.findOne({ complaintId: complaint._id, status: { $ne: "CANCELLED" } });
+      }
+      if (wo) {
+        wo.engineerId = engineer._id;
+        await wo.save();
+        complaint.workOrderId = wo._id;
+      } else {
+        wo = await WorkOrder.create({
+          workOrderId: await nextCode(WorkOrder, "workOrderId", "WO-", 4),
+          title: `Investigate: ${complaint.title}`,
+          equipmentId: complaint.equipmentId,
+          complaintId: complaint._id,
+          departmentId: complaint.departmentId,
+          engineerId: engineer._id,
+          maintenanceType: "CORRECTIVE",
+          priority: complaint.priority || "MEDIUM",
+          status: "ASSIGNED",
+          scheduledDate: new Date(),
+          description: complaint.description || complaint.title,
+          createdBy: req.user._id,
+        });
+        complaint.workOrderId = wo._id;
+      }
+    }
+  }
   await complaint.save();
   await complaint.populate([
     { path: "equipmentId", select: "equipmentId name category status" },
     { path: "departmentId", select: "name code" },
     { path: "assignedEngineerId", select: "name initials" },
     { path: "reportedBy", select: "name" },
+    { path: "workOrderId", select: "workOrderId title status" },
   ]);
   await logAudit({ user: req.user, action: "COMPLAINT_UPDATED", module: "Complaint", recordId: complaint.complaintId, equipmentId: complaint.equipmentId, description: `${complaint.complaintId} updated` });
   return ok(res, complaint);
@@ -179,14 +221,48 @@ export const updateComplaintStatus = asyncHandler(async (req, res) => {
 });
 
 export const assignComplaint = asyncHandler(async (req, res) => {
-  requireFields(req.body, ["engineerId"]);
+  const engineerId = req.body.engineerId || req.body.assignedEngineerId;
+  if (!engineerId) throw new ApiError(400, "engineerId is required");
   const complaint = await load(req.params.id);
-  const engineer = await User.findById(req.body.engineerId);
+  const engineer = await User.findById(engineerId);
   if (!engineer || engineer.role !== "BIOMEDICAL_ENGINEER") throw new ApiError(400, "Assignee must be a biomedical engineer");
 
   complaint.assignedEngineerId = engineer._id;
-  if (complaint.status === "OPEN") complaint.status = "UNDER_REVIEW";
-  if (complaint.status === "UNDER_REVIEW") complaint.status = "ASSIGNED";
+  if (complaint.status === "OPEN" || complaint.status === "UNDER_REVIEW") {
+    complaint.status = "ASSIGNED";
+  }
+
+  let wo = null;
+  if (complaint.workOrderId) {
+    wo = await WorkOrder.findById(complaint.workOrderId);
+  }
+  if (!wo) {
+    wo = await WorkOrder.findOne({ complaintId: complaint._id, status: { $ne: "CANCELLED" } });
+  }
+
+  if (wo) {
+    wo.engineerId = engineer._id;
+    if (wo.status === "ASSIGNED" && !wo.engineerId) wo.engineerId = engineer._id;
+    await wo.save();
+    complaint.workOrderId = wo._id;
+  } else {
+    wo = await WorkOrder.create({
+      workOrderId: await nextCode(WorkOrder, "workOrderId", "WO-", 4),
+      title: `Investigate: ${complaint.title}`,
+      equipmentId: complaint.equipmentId,
+      complaintId: complaint._id,
+      departmentId: complaint.departmentId,
+      engineerId: engineer._id,
+      maintenanceType: "CORRECTIVE",
+      priority: complaint.priority || "MEDIUM",
+      status: "ASSIGNED",
+      scheduledDate: new Date(),
+      description: complaint.description || complaint.title,
+      createdBy: req.user._id,
+    });
+    complaint.workOrderId = wo._id;
+  }
+
   await complaint.save();
 
   await complaint.populate([
@@ -194,6 +270,7 @@ export const assignComplaint = asyncHandler(async (req, res) => {
     { path: "departmentId", select: "name code" },
     { path: "assignedEngineerId", select: "name initials" },
     { path: "reportedBy", select: "name" },
+    { path: "workOrderId", select: "workOrderId title status" },
   ]);
 
   await logAudit({
@@ -202,18 +279,56 @@ export const assignComplaint = asyncHandler(async (req, res) => {
     module: "Complaint",
     recordId: complaint.complaintId,
     equipmentId: complaint.equipmentId,
+    workOrderId: wo._id,
     newStatus: complaint.status,
     description: `${complaint.complaintId} assigned to ${engineer.name}`,
   });
   return ok(res, complaint);
 });
 
-
 export const complaintHistory = asyncHandler(async (req, res) => {
   const complaint = await load(req.params.id);
   assertComplaintAccess(complaint, req.user);
-  const events = await AuditLog.find({ recordId: complaint.complaintId }).sort({ timestamp: -1 });
+  const query = {
+    $or: [
+      { recordId: complaint.complaintId },
+      { complaintId: complaint._id },
+    ],
+  };
+  if (complaint.workOrderId) {
+    query.$or.push({ workOrderId: complaint.workOrderId });
+  }
+  const events = await AuditLog.find(query).sort({ timestamp: -1 });
   return ok(res, { complaint, events });
+});
+
+export const complaintTimeline = asyncHandler(async (req, res) => {
+  const complaint = await load(req.params.id);
+  assertComplaintAccess(complaint, req.user);
+  const query = {
+    $or: [
+      { recordId: complaint.complaintId },
+      { complaintId: complaint._id },
+    ],
+  };
+  if (complaint.workOrderId) {
+    query.$or.push({ workOrderId: complaint.workOrderId });
+  }
+  const events = await AuditLog.find(query)
+    .populate("userId", "name role initials")
+    .sort({ timestamp: 1 });
+
+  const timeline = events.map((ev) => ({
+    _id: ev._id,
+    title: ev.description || ev.action,
+    status: ev.newStatus || ev.action,
+    action: ev.action,
+    actor: ev.userId || { name: ev.userName || "System", role: ev.role || "SYSTEM" },
+    timestamp: ev.timestamp || new Date(),
+    metadata: ev.metadata,
+  }));
+
+  return ok(res, timeline);
 });
 
 export const addComplaintMessage = asyncHandler(async (req, res) => {

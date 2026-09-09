@@ -44,8 +44,13 @@ export function paginate(query) {
  * so frontend deep links keep working unchanged.
  */
 export async function findByAnyId(Model, id, codeField) {
-  const doc = mongoose.Types.ObjectId.isValid(id)
-    ? await Model.findById(id)
-    : await Model.findOne({ [codeField]: id });
+  if (!id) return null;
+  let doc = null;
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    doc = await Model.findById(id);
+  }
+  if (!doc && codeField) {
+    doc = await Model.findOne({ [codeField]: id });
+  }
   return doc;
 }

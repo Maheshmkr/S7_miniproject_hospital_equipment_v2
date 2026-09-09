@@ -347,7 +347,8 @@ export const submitChecklist = asyncHandler(async (req, res) => {
     }
   }
 
-  m.checklistResponses = saved.map((s) => s._id);
+  const allResponses = await ChecklistResponse.find({ maintenanceId: m._id });
+  m.checklistResponses = allResponses.map((s) => s._id);
   if (m.status === "STARTED") m.status = "IN_PROGRESS";
   await m.save();
 
@@ -551,14 +552,15 @@ export const completeMaintenance = asyncHandler(async (req, res) => {
   const hasFailure = responses.some((r) => r.outcome === "FAIL");
   const investigation = await Investigation.findOne({ maintenanceId: m._id });
   if (hasFailure && !investigation) problems.push("Investigation is required when a checklist item failed");
-  if (hasFailure && !(investigation?.rootCause || m.rootCause)) problems.push("Root cause is required");
-  if (!(investigation?.correctiveAction || m.correctiveAction)) problems.push("Corrective action is required");
-
-  const verification = req.body.verification || m.verification;
-  if (!verification?.safetyVerified) problems.push("Safety verification is required");
-
   const report = await ServiceReport.findOne({ maintenanceId: m._id });
   if (!report) problems.push("Service report must be created before completion");
+
+  const corrective = investigation?.correctiveAction || m.correctiveAction || report?.correctiveAction || req.body?.correctiveAction || (hasFailure ? null : "Routine inspection and verification passed");
+  if (!corrective) problems.push("Corrective action is required");
+  else if (!m.correctiveAction) m.correctiveAction = corrective;
+
+  const verification = req.body?.verification || m.verification;
+  if (!verification?.safetyVerified) problems.push("Safety verification is required");
 
   if (problems.length) throw new ApiError(422, "Maintenance cannot be completed yet", problems);
 
@@ -571,15 +573,38 @@ export const completeMaintenance = asyncHandler(async (req, res) => {
 
   const wo = await WorkOrder.findById(m.workOrderId);
   if (wo) {
+    const prevWoStatus = wo.status;
     wo.status = "COMPLETED";
+    if (!wo.completedAt) wo.completedAt = new Date();
     await wo.save();
+
+    await logAudit({
+      user: req.user,
+      action: "WORK_ORDER_STATUS_CHANGED",
+      module: "WorkOrder",
+      recordId: wo.workOrderId,
+      workOrderId: wo._id,
+      equipmentId: wo.equipmentId,
+      previousStatus: prevWoStatus,
+      newStatus: "COMPLETED",
+      description: `${wo.workOrderId} marked COMPLETED via maintenance ${m.maintenanceId}`,
+    });
   }
 
   await setEquipmentStatus(equipment, "OPERATIONAL", req.user, `${m.maintenanceId} completed`);
 
   if (m.complaintId) {
     const complaint = await Complaint.findById(m.complaintId);
-    if (complaint) await setComplaintStatus(complaint, "RESOLVED", req.user, { force: true });
+    if (complaint) {
+      if (!complaint.resolution) {
+        complaint.resolution =
+          report?.summaryOfWork ||
+          report?.engineerRemarks ||
+          m.remarks ||
+          `Resolved via maintenance ${m.maintenanceId}`;
+      }
+      await setComplaintStatus(complaint, "RESOLVED", req.user, { force: true });
+    }
   }
 
   if (report) {

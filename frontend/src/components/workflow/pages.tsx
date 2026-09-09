@@ -142,7 +142,13 @@ export function WorkflowTabs({ moduleKey, active }: { moduleKey: ModuleKey; acti
   );
 }
 
-function StatCards({ moduleKey, stats }: { moduleKey: ModuleKey; stats?: { label: string; value: string; delta: string }[] }) {
+function StatCards({
+  moduleKey,
+  stats,
+}: {
+  moduleKey: ModuleKey;
+  stats?: { label: string; value: string; delta: string }[];
+}) {
   const m = getModule(moduleKey);
   const displayStats = stats ?? m.stats;
   return (
@@ -382,11 +388,18 @@ export function ModuleList({
   );
 }
 
-/* ----------------------------------- Form pages ------------------------------------ */
-
-function Field({ f, defaultValue }: { f: FieldDef; defaultValue?: string | undefined }) {
+function Field({
+  f,
+  defaultValue,
+  dynamicOptions,
+}: {
+  f: FieldDef;
+  defaultValue?: string | undefined;
+  dynamicOptions?: string[] | undefined;
+}) {
   const base =
     "mt-2 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[13px] text-foreground shadow-xs outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:shadow-soft";
+  const options = dynamicOptions && dynamicOptions.length > 0 ? dynamicOptions : (f.options ?? []);
   return (
     <div className={cn(f.wide && "sm:col-span-2")}>
       <label className="text-[12px] font-semibold text-foreground" htmlFor={f.name}>
@@ -403,7 +416,7 @@ function Field({ f, defaultValue }: { f: FieldDef; defaultValue?: string | undef
         />
       ) : f.type === "select" ? (
         <select id={f.name} name={f.name} defaultValue={defaultValue} className={base}>
-          {(f.options ?? []).map((o) => (
+          {options.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
@@ -440,6 +453,41 @@ function RecordForm({
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { items: liveEquipment } = useEquipmentList(apiEnabled ? { limit: 200 } : { limit: 0 });
+  const { items: liveDepartments } = useDepartmentList(apiEnabled ? { limit: 100 } : { limit: 0 });
+  const { items: liveUsers } = useUserList(apiEnabled ? { limit: 100 } : { limit: 0 });
+
+  const getDynamicOptions = (fieldName: string) => {
+    if (
+      (fieldName === "equipment" || fieldName === "equipmentId") &&
+      liveEquipment &&
+      liveEquipment.length > 0
+    ) {
+      return liveEquipment.map((e) => e.name);
+    }
+    if (
+      (fieldName === "dept" || fieldName === "department" || fieldName === "departmentId") &&
+      liveDepartments &&
+      liveDepartments.length > 0
+    ) {
+      return liveDepartments.map((d) => d.name);
+    }
+    if (
+      (fieldName === "assignee" ||
+        fieldName === "engineerId" ||
+        fieldName === "owner" ||
+        fieldName === "engineer") &&
+      liveUsers &&
+      liveUsers.length > 0
+    ) {
+      const engineers = liveUsers
+        .filter((u) => u.role === "BIOMEDICAL_ENGINEER")
+        .map((u) => u.name);
+      return engineers.length > 0 ? engineers : liveUsers.map((u) => u.name);
+    }
+    return undefined;
+  };
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -491,7 +539,12 @@ function RecordForm({
         />
         <div className="grid gap-5 px-6 pb-6 sm:grid-cols-2 sm:px-7">
           {m.fields.map((f) => (
-            <Field key={f.name} f={f} defaultValue={mode === "edit" ? defaults(f) : undefined} />
+            <Field
+              key={f.name}
+              f={f}
+              defaultValue={mode === "edit" ? defaults(f) : undefined}
+              dynamicOptions={getDynamicOptions(f.name)}
+            />
           ))}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-5 sm:px-7">
@@ -1070,7 +1123,7 @@ export function ModuleHistory({ moduleKey, id }: { moduleKey: ModuleKey; id: str
 
 export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
   const m = getModule(moduleKey);
-  
+
   // Call register list hooks to fetch live records for comparative charts and top performers
   const eqList = useEquipmentList({ limit: 100 });
   const compList = useComplaintList({ limit: 100 });
@@ -1081,7 +1134,7 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
   const vendList = useVendorList({ limit: 100 });
   const deptList = useDepartmentList();
   const usrList = useUserList();
-  
+
   const liveRecords = (() => {
     if (!apiEnabled) return null;
     if (moduleKey === "equipment") return eqList.records;
@@ -1230,7 +1283,10 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
           />
           <div className="h-[260px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={activeRecords.map((r) => ({ name: r.id, score: r.score }))} barGap={6}>
+              <BarChart
+                data={activeRecords.map((r) => ({ name: r.id, score: r.score }))}
+                barGap={6}
+              >
                 <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="name"

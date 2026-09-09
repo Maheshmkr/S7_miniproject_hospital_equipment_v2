@@ -8,7 +8,7 @@ function escapeHtml(unsafe: string): string {
 }
 
 export function renderErrorPage(error?: unknown): string {
-  const errorObj = error instanceof Error ? error : (error ? new Error(String(error)) : null);
+  const errorObj = error instanceof Error ? error : error ? new Error(String(error)) : null;
   const errorMessage = errorObj ? errorObj.message : "";
   const errorStack = errorObj && errorObj.stack ? errorObj.stack : "";
 
@@ -187,7 +187,9 @@ export function renderErrorPage(error?: unknown): string {
       <h1>This page didn't load</h1>
       <p>Something went wrong on our end. You can try refreshing or head back home.</p>
       
-      ${errorMessage ? `
+      ${
+        errorMessage
+          ? `
       <div class="error-box">
         <div class="error-header">Error</div>
         <div class="error-msg">${escapeHtml(errorMessage)}</div>
@@ -196,7 +198,9 @@ export function renderErrorPage(error?: unknown): string {
           <pre>${escapeHtml(errorStack || "No stack trace available")}</pre>
         </details>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
 
       <div class="actions">
         <button class="primary" onclick="location.reload()">Try again</button>

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * useEngineerWorkflow
  *
  * Central state hook used by every engineer workflow page
@@ -48,7 +48,12 @@ export function useEngineerWorkflow(workOrderId: string): EngineerWorkflowState 
       .get(workOrderId)
       .then(async (ctx) => {
         if (cancelled) return;
-        setContext(ctx);
+        if (!cancelled) {
+          setContext(ctx);
+          if (ctx.maintenance) {
+            setMaintenance(ctx.maintenance);
+          }
+        }
         try {
           const page = await maintenanceApi.list({
             workOrderId: ctx.workOrder._id,
@@ -56,11 +61,9 @@ export function useEngineerWorkflow(workOrderId: string): EngineerWorkflowState 
           });
           if (!cancelled && page.items.length > 0) {
             setMaintenance(page.items[0]!);
-          } else if (!cancelled && ctx.maintenance) {
-            setMaintenance(ctx.maintenance);
           }
         } catch {
-          // No maintenance yet
+          // Fall back to ctx.maintenance
         }
       })
       .catch((err) => !cancelled && setError(msg(err, "Unable to load work order.")))
@@ -72,27 +75,28 @@ export function useEngineerWorkflow(workOrderId: string): EngineerWorkflowState 
   }, [workOrderId, nonce]);
 
   const startWork = useCallback(async (): Promise<ApiMaintenance | null> => {
-    if (!apiEnabled || !context) return null;
-    if (maintenance) return maintenance;
+    if (!apiEnabled) return null;
+    const targetId = context?.workOrder._id || workOrderId;
+    if (!targetId) return null;
     try {
-      const updatedCtx = await workOrdersApi.start(context.workOrder._id);
+      const updatedCtx = await workOrdersApi.start(targetId);
       if (updatedCtx.maintenance) {
         setMaintenance(updatedCtx.maintenance);
         setContext(updatedCtx);
         return updatedCtx.maintenance;
       }
       const page = await maintenanceApi.list({
-        workOrderId: context.workOrder._id,
+        workOrderId: updatedCtx.workOrder?._id || targetId,
         limit: 1,
       });
       const m = page.items[0] ?? null;
-      setMaintenance(m);
+      if (m) setMaintenance(m);
       return m;
     } catch (err) {
       setError(msg(err, "Failed to start maintenance."));
       return null;
     }
-  }, [context, maintenance]);
+  }, [context, workOrderId]);
 
   return {
     enabled: apiEnabled,

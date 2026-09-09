@@ -122,6 +122,8 @@ function useComplaintLookups() {
         const byEngineer: Record<string, string> = {};
         for (const u of list) {
           byEngineer[u.name] = u._id;
+          byEngineer[u.name.trim()] = u._id;
+          byEngineer[u.name.toLowerCase()] = u._id;
           byEngineer[u.email] = u._id;
           byEngineer[u._id] = u._id;
         }
@@ -143,9 +145,11 @@ export function useComplaintMutations() {
     async (values: Record<string, string>) => {
       const { engineerId, equipmentId, ...rest } = toComplaintPayload(values, lookups);
       if (!equipmentId) throw new Error("Select an equipment record that exists in the register.");
-      const complaint = await complaintsApi.create({ ...rest, equipmentId });
-      if (engineerId)
-        await complaintsApi.assign(complaint.complaintId || complaint._id, engineerId);
+      const complaint = await complaintsApi.create({
+        ...rest,
+        equipmentId,
+        ...(engineerId ? { engineerId } : {}),
+      });
       return complaint;
     },
     [lookups],
@@ -159,8 +163,8 @@ export function useComplaintMutations() {
         description,
         priority: priority as ApiComplaint["priority"],
         ...(values["resolution"] ? { resolution: values["resolution"] } : {}),
+        ...(engineerId ? ({ engineerId } as unknown as Partial<ApiComplaint>) : {}),
       });
-      if (engineerId) await complaintsApi.assign(id, engineerId);
       return complaint;
     },
     [lookups],

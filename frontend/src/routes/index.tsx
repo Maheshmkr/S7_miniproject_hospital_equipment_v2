@@ -112,8 +112,13 @@ function useDashboardAnalytics() {
   return { data, loading };
 }
 
-function HeroBanner({ analytics, loading }: { analytics: DashboardAnalytics | null; loading: boolean }) {
-
+function HeroBanner({
+  analytics,
+  loading,
+}: {
+  analytics: DashboardAnalytics | null;
+  loading: boolean;
+}) {
   const liveKpis = analytics
     ? [
         {
@@ -225,10 +230,12 @@ function HeroBanner({ analytics, loading }: { analytics: DashboardAnalytics | nu
 }
 
 function EquipmentHealth({ analytics }: { analytics: DashboardAnalytics | null }) {
-  const activeHealthTrend = apiEnabled && analytics?.healthTrend ? analytics.healthTrend : healthTrend;
-  const compositeHealth = analytics && analytics.healthTrend && analytics.healthTrend.length > 0
-    ? analytics.healthTrend[analytics.healthTrend.length - 1].health
-    : 98;
+  const activeHealthTrend =
+    apiEnabled && analytics?.healthTrend ? analytics.healthTrend : healthTrend;
+  const compositeHealth =
+    analytics && analytics.healthTrend && analytics.healthTrend.length > 0
+      ? analytics.healthTrend[analytics.healthTrend.length - 1].health
+      : 98;
 
   return (
     <Panel className="lg:col-span-2">
@@ -262,9 +269,15 @@ function EquipmentHealth({ analytics }: { analytics: DashboardAnalytics | null }
         <div className="h-10 w-px bg-border" />
         <div className="flex gap-6">
           {[
-            { l: "Assets monitored", v: analytics ? analytics.totalEquipment.toLocaleString() : "2,486" },
+            {
+              l: "Assets monitored",
+              v: analytics ? analytics.totalEquipment.toLocaleString() : "2,486",
+            },
             { l: "Incidents this month", v: analytics ? analytics.openComplaints.toString() : "9" },
-            { l: "MTTR", v: analytics ? `${(analytics.avgResolutionHours / 10).toFixed(1)} h` : "3.2 h" },
+            {
+              l: "MTTR",
+              v: analytics ? `${(analytics.avgResolutionHours / 10).toFixed(1)} h` : "3.2 h",
+            },
           ].map((s) => (
             <div key={s.l}>
               <p className="text-[17px] font-semibold tabular-nums">{s.v}</p>
@@ -884,7 +897,8 @@ function MaintenanceCalendar() {
 
 function AnalyticsCharts({ analytics }: { analytics: DashboardAnalytics | null }) {
   const activeCostSplit = apiEnabled && analytics?.costSplit ? analytics.costSplit : costSplit;
-  const activeComplaintFlow = apiEnabled && analytics?.complaintFlow ? analytics.complaintFlow : complaintFlowData;
+  const activeComplaintFlow =
+    apiEnabled && analytics?.complaintFlow ? analytics.complaintFlow : complaintFlowData;
 
   return (
     <Panel className="lg:col-span-2">
@@ -1120,7 +1134,8 @@ function RightRail() {
 }
 
 function MiniTrend({ analytics }: { analytics: DashboardAnalytics | null }) {
-  const activeHealthTrend = apiEnabled && analytics?.healthTrend ? analytics.healthTrend : healthTrend;
+  const activeHealthTrend =
+    apiEnabled && analytics?.healthTrend ? analytics.healthTrend : healthTrend;
 
   return (
     <Panel className="lg:col-span-3">

@@ -18,7 +18,14 @@ export type DashboardAnalytics = {
   healthTrend: { month: string; health: number; uptime: number; incidents: number }[];
   costSplit: { name: string; value: number }[];
   complaintFlow: { day: string; raised: number; resolved: number }[];
-  departments: { name: string; assets: number; complaints: number; staff: number; uptime: number; score: number }[];
+  departments: {
+    name: string;
+    assets: number;
+    complaints: number;
+    staff: number;
+    uptime: number;
+    score: number;
+  }[];
   engineers: { name: string; avatar: string; zone: string; open: number; load: number }[];
 };
 
@@ -107,7 +114,8 @@ export type AnalyticsFilter = {
 };
 
 export const analyticsApi = {
-  dashboard: (filters?: AnalyticsFilter) => get<DashboardAnalytics>("/analytics/dashboard", filters),
+  dashboard: (filters?: AnalyticsFilter) =>
+    get<DashboardAnalytics>("/analytics/dashboard", filters),
   equipment: (filters?: AnalyticsFilter) =>
     get<{
       byStatus: Bucket[];
@@ -152,16 +160,20 @@ export const analyticsApi = {
       "/analytics/audit",
       filters,
     ),
-  workOrders: (filters?: AnalyticsFilter) => get<WorkOrderAnalytics>("/analytics/work-orders", filters),
-  calibration: (filters?: AnalyticsFilter) => get<CalibrationAnalytics>("/analytics/calibration", filters),
+  workOrders: (filters?: AnalyticsFilter) =>
+    get<WorkOrderAnalytics>("/analytics/work-orders", filters),
+  calibration: (filters?: AnalyticsFilter) =>
+    get<CalibrationAnalytics>("/analytics/calibration", filters),
   preventiveMaintenance: (filters?: AnalyticsFilter) =>
     get<PreventiveAnalytics>("/analytics/preventive-maintenance", filters),
   trends: (filters?: AnalyticsFilter) => get<TrendData[]>("/analytics/trends", filters),
-  distributions: (filters?: AnalyticsFilter) => get<DistributionData>("/analytics/distributions", filters),
+  distributions: (filters?: AnalyticsFilter) =>
+    get<DistributionData>("/analytics/distributions", filters),
   comparativePerformance: (filters?: AnalyticsFilter) =>
     get<ComparisonData[]>("/analytics/comparative-performance", filters),
   costs: (filters?: AnalyticsFilter) => get<CostData>("/analytics/costs", filters),
   compliance: (filters?: AnalyticsFilter) => get<ComplianceData>("/analytics/compliance", filters),
-  availability: (filters?: AnalyticsFilter) => get<AvailabilityData>("/analytics/availability", filters),
+  availability: (filters?: AnalyticsFilter) =>
+    get<AvailabilityData>("/analytics/availability", filters),
   breakdowns: (filters?: AnalyticsFilter) => get<BreakdownData>("/analytics/breakdowns", filters),
 };

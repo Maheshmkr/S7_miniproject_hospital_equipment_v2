@@ -597,7 +597,12 @@ export const modules = {
         type: "select",
         options: ["Critical", "High", "Medium", "Low"],
       },
-      { name: "assignee", label: "Assignee", type: "select", options: users.map((u) => u.name) },
+      {
+        name: "assignee",
+        label: "Assignee",
+        type: "select",
+        options: ["Daniel Okafor", "Marcus Vance", "Unassigned"],
+      },
       { name: "due", label: "SLA due date", type: "date" },
       {
         name: "description",
@@ -657,7 +662,7 @@ export const modules = {
         name: "engineer",
         label: "Assigned engineer",
         type: "select",
-        options: users.map((u) => u.name),
+        options: ["Daniel Okafor", "Marcus Vance", "Unassigned"],
       },
       { name: "date", label: "Scheduled date", type: "date" },
       { name: "duration", label: "Estimated hours", type: "number", placeholder: "2" },

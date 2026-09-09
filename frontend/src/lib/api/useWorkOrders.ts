@@ -102,7 +102,15 @@ function useWorkOrderLookups() {
       .list({ limit: 200 })
       .then((page) => {
         if (cancelled) return;
-        setEquipmentByName(Object.fromEntries(page.items.map((e) => [e.name, e._id])));
+        const byEquip: Record<string, string> = {};
+        for (const e of page.items) {
+          byEquip[e.name] = e._id;
+          byEquip[e.equipmentId] = e._id;
+          byEquip[`${e.equipmentId} — ${e.name}`] = e._id;
+          byEquip[`${e.equipmentId} · ${e.name}`] = e._id;
+          byEquip[e._id] = e._id;
+        }
+        setEquipmentByName(byEquip);
       })
       .catch(() => undefined);
     usersApi
@@ -110,7 +118,14 @@ function useWorkOrderLookups() {
       .then((page) => {
         if (cancelled) return;
         const list = Array.isArray(page) ? page : page.items;
-        setEngineersByName(Object.fromEntries(list.map((u) => [u.name, u._id])));
+        const byEng: Record<string, string> = {};
+        for (const u of list) {
+          byEng[u.name] = u._id;
+          byEng[u.name.trim()] = u._id;
+          byEng[u.email] = u._id;
+          byEng[u._id] = u._id;
+        }
+        setEngineersByName(byEng);
       })
       .catch(() => undefined);
     return () => {

@@ -5,9 +5,8 @@ import { requireRole } from "../middleware/roleMiddleware.js";
 
 const router = Router();
 router.use(requireAuth);
-// The user directory is administrator-only; everyone else reads themselves via /api/auth/me.
-router.get("/", requireRole("ADMINISTRATOR"), c.listUsers);
-router.get("/:id", requireRole("ADMINISTRATOR"), c.getUser);
+router.get("/", c.listUsers);
+router.get("/:id", c.getUser);
 router.post("/", requireRole("ADMINISTRATOR"), c.createUser);
 router.put("/:id", requireRole("ADMINISTRATOR"), c.updateUser);
 router.patch("/:id/status", requireRole("ADMINISTRATOR"), c.updateUserStatus);

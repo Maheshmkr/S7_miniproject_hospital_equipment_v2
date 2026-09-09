@@ -159,27 +159,48 @@ function useWorkflowTask(id: string) {
         summary: workOrder.description ?? "",
         dept:
           typeof workOrder.departmentId === "object" && workOrder.departmentId
-            ? ((workOrder.departmentId as { name?: string }).name ?? "ICU")
-            : "ICU",
+            ? ((workOrder.departmentId as { name?: string }).name ?? "")
+            : workOrder.departmentId
+              ? String(workOrder.departmentId)
+              : "",
         complaintId:
           typeof workOrder.complaintId === "object" && workOrder.complaintId
-            ? ((workOrder.complaintId as { complaintId?: string }).complaintId ?? "CMP-2026-0044")
-            : "CMP-2026-0044",
-        parts: [{ part: "Flow Sensor Module", code: "FLS-8821", qty: 1, status: "Fitted" }],
+            ? ((workOrder.complaintId as { complaintId?: string }).complaintId ?? "")
+            : workOrder.complaintId
+              ? String(workOrder.complaintId)
+              : "",
+        engineer:
+          typeof workOrder.engineerId === "object" && workOrder.engineerId
+            ? ((workOrder.engineerId as { name?: string }).name ?? "")
+            : workOrder.engineerId
+              ? String(workOrder.engineerId)
+              : "",
+        parts:
+          (
+            workOrder as unknown as {
+              partsUsed?: {
+                name?: string;
+                part?: string;
+                code?: string;
+                qty?: number;
+                status?: string;
+              }[];
+            }
+          ).partsUsed ?? [],
         progress:
           workOrder.status === "COMPLETED" ? 100 : workOrder.status === "IN_PROGRESS" ? 50 : 25,
       }
     : mockTask
-      ? { ...mockTask, _id: mockTask.id }
+      ? { ...mockTask, _id: mockTask.id, engineer: "Daniel Okafor" }
       : null;
 
   const equipName = workOrder
     ? typeof workOrder.equipmentId === "object" && workOrder.equipmentId
-      ? ((workOrder.equipmentId as { name?: string }).name ?? "Equipment")
-      : String(workOrder.equipmentId)
+      ? ((workOrder.equipmentId as { name?: string }).name ?? "Medical Equipment")
+      : String(workOrder.equipmentId || "Medical Equipment")
     : mockAsset
       ? mockAsset.name
-      : "Hamilton C6 ICU Ventilator";
+      : "Medical Equipment";
 
   const equipId = workOrder
     ? typeof workOrder.equipmentId === "object" && workOrder.equipmentId
@@ -196,7 +217,7 @@ function useWorkflowTask(id: string) {
 
 export function StartMaintenance({ id }: { id: string }) {
   const { t, equipName, loading } = useWorkflowTask(id);
-  const { startWork } = useEngineerWorkflow(id);
+  const { startWork, maintenance } = useEngineerWorkflow(id);
   const [starting, setStarting] = useState(false);
   const navigate = useNavigate();
   const [ack, setAck] = useState<Record<string, boolean>>({});
@@ -220,11 +241,7 @@ export function StartMaintenance({ id }: { id: string }) {
       // Continue to next step
     } finally {
       setStarting(false);
-      const nextTo =
-        t.type === "Corrective" || t.type === "CORRECTIVE"
-          ? ("/engineer/tasks/$id/breakdown" as const)
-          : ("/engineer/tasks/$id/checklist" as const);
-      navigate({ to: nextTo, params: { id: t._id } });
+      navigate({ to: "/engineer/tasks/$id/checklist", params: { id: t._id } });
     }
   };
 
@@ -335,7 +352,7 @@ export function StartMaintenance({ id }: { id: string }) {
             />
             <div className="grid gap-4 px-6 pb-6 sm:px-7 md:grid-cols-2">
               <Field label="Lead engineer">
-                <TextInput defaultValue="Daniel Okafor" />
+                <TextInput defaultValue={t.engineer || "Daniel Okafor"} />
               </Field>
               <Field label="Support engineer">
                 <SelectInput
@@ -360,7 +377,9 @@ export function StartMaintenance({ id }: { id: string }) {
                 />
               </Field>
               <Field label="Clinical contact">
-                <TextInput defaultValue="ICU Charge Nurse · ext. 4412" />
+                <TextInput
+                  defaultValue={t.dept ? `${t.dept} Coordinator` : "Department Coordinator"}
+                />
               </Field>
               <Field label="Pre-work notes" wide>
                 <TextArea defaultValue={t.summary} />
@@ -431,14 +450,19 @@ export function StartMaintenance({ id }: { id: string }) {
 
 export function PreventiveChecklistPage({ id }: { id: string }) {
   const { t, equipName, loading } = useWorkflowTask(id);
-  const { maintenance } = useEngineerWorkflow(id);
+  const { maintenance, startWork } = useEngineerWorkflow(id);
   const [dynamicQuestions, setDynamicQuestions] = useState<ApiChecklistQuestion[]>([]);
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [state, setState] = useState<Record<string, "pass" | "fail" | "na">>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!maintenance) return;
+    if (!maintenance) {
+      if (apiEnabled && id) {
+        startWork().catch(() => {});
+      }
+      return;
+    }
     setChecklistLoading(true);
     maintenanceApi
       .checklist(maintenance._id)
@@ -446,6 +470,7 @@ export function PreventiveChecklistPage({ id }: { id: string }) {
         if (res?.questions?.length) {
           setDynamicQuestions(res.questions);
           const initialMap: Record<string, "pass" | "fail" | "na"> = {};
+          const initialNotes: Record<string, string> = {};
           res.responses?.forEach((r) => {
             const q = res.questions.find(
               (x) =>
@@ -457,14 +482,18 @@ export function PreventiveChecklistPage({ id }: { id: string }) {
               const outcome = r.outcome?.toLowerCase();
               initialMap[q.question] =
                 outcome === "pass" ? "pass" : outcome === "fail" ? "fail" : "na";
+              if (r.notes) {
+                initialNotes[q.question] = r.notes;
+              }
             }
           });
           setState((prev) => ({ ...initialMap, ...prev }));
+          setNotes((prev) => ({ ...initialNotes, ...prev }));
         }
       })
       .catch(() => {})
       .finally(() => setChecklistLoading(false));
-  }, [maintenance]);
+  }, [maintenance, id, startWork]);
 
   const all =
     dynamicQuestions.length > 0
@@ -536,9 +565,23 @@ export function PreventiveChecklistPage({ id }: { id: string }) {
             <ActionButton variant="ghost" to="/engineer/tasks/$id" params={{ id: t._id }}>
               Back to task
             </ActionButton>
-            <ActionButton to="/engineer/tasks/$id/uploads" params={{ id: t._id }} icon={ArrowRight}>
-              Attach evidence
-            </ActionButton>
+            {failed > 0 ? (
+              <ActionButton
+                to="/engineer/tasks/$id/breakdown"
+                params={{ id: t._id }}
+                icon={CircleAlert}
+              >
+                Investigate failure
+              </ActionButton>
+            ) : (
+              <ActionButton
+                to="/engineer/tasks/$id/uploads"
+                params={{ id: t._id }}
+                icon={ArrowRight}
+              >
+                Attach evidence
+              </ActionButton>
+            )}
           </>
         }
       />
@@ -799,7 +842,7 @@ export function BreakdownMaintenance({ id }: { id: string }) {
       // Ignore failure and continue navigation
     } finally {
       setSaving(false);
-      navigate({ to: "/engineer/tasks/$id/report", params: { id: t._id } });
+      navigate({ to: "/engineer/tasks/$id/uploads", params: { id: t._id } });
     }
   };
 
@@ -855,7 +898,7 @@ export function BreakdownMaintenance({ id }: { id: string }) {
               ) : (
                 <FileText className="size-4" />
               )}
-              Draft service report
+              Attach evidence & continue
             </button>
           </>
         }
@@ -1110,44 +1153,6 @@ export function UploadEvidence({ id }: { id: string }) {
     }
   };
 
-  const fallbackFiles = [
-    {
-      name: "flow-sensor-before.jpg",
-      kind: "Photo",
-      size: "2.4 MB",
-      when: "Today · 10:38",
-      tone: "primary" as const,
-    },
-    {
-      name: "flow-sensor-after.jpg",
-      kind: "Photo",
-      size: "2.1 MB",
-      when: "Today · 11:12",
-      tone: "primary" as const,
-    },
-    {
-      name: "alarm-log-export.csv",
-      kind: "Log",
-      size: "184 KB",
-      when: "Today · 11:15",
-      tone: "violet" as const,
-    },
-    {
-      name: "esa615-safety-test.pdf",
-      kind: "Test report",
-      size: "612 KB",
-      when: "Today · 11:26",
-      tone: "success" as const,
-    },
-    {
-      name: "vendor-part-invoice.pdf",
-      kind: "Invoice",
-      size: "308 KB",
-      when: "Today · 11:30",
-      tone: "warning" as const,
-    },
-  ];
-
   const displayFiles =
     liveEvidence.length > 0
       ? liveEvidence.map((e) => ({
@@ -1159,7 +1164,9 @@ export function UploadEvidence({ id }: { id: string }) {
             : "Today",
           tone: "primary" as const,
         }))
-      : fallbackFiles;
+      : apiEnabled
+        ? []
+        : fallbackFiles;
 
   if (loading) {
     return (
@@ -1375,10 +1382,26 @@ export function ServiceReport({ id }: { id: string }) {
     "Earth resistance 0.12 Ω · Leakage NC 46 µA · Leakage SFC 212 µA · Insulation 14 MΩ. Functional verification passed across all ventilation modes.",
   );
   const [recommendations, setRecommendations] = useState(
-    "Increase flow sensor replacement frequency to 6 months on units exceeding 9,000 running hours.",
+    "Perform periodic calibration and safety verification per manufacturer schedule.",
   );
-  const [signName, setSignName] = useState("D. Okafor");
+  const [signName, setSignName] = useState(t?.engineer || "Daniel Okafor");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!maintenance) return;
+    maintenanceApi
+      .get(maintenance._id)
+      .then((res) => {
+        if (res?.serviceReport) {
+          if (res.serviceReport.diagnosticFindings)
+            setWorkPerformed(res.serviceReport.diagnosticFindings);
+          if (res.serviceReport.testResult) setTestResults(res.serviceReport.testResult);
+          if (res.serviceReport.engineerRemarks)
+            setRecommendations(res.serviceReport.engineerRemarks);
+        }
+      })
+      .catch(() => {});
+  }, [maintenance]);
 
   const handleSaveReport = async () => {
     if (!t) return;
@@ -1386,7 +1409,7 @@ export function ServiceReport({ id }: { id: string }) {
     try {
       if (maintenance) {
         await maintenanceApi.createServiceReport(maintenance._id, {
-          problem: t.summary,
+          problem: t.summary || "Corrective service",
           diagnosticFindings: workPerformed,
           testResult: testResults,
           finalCondition: "OPERATIONAL",
@@ -1462,7 +1485,7 @@ export function ServiceReport({ id }: { id: string }) {
           <Panel interactive={false}>
             <PanelHead
               title={`Service report ${t.id}`}
-              subtitle={`${equipName} · ${t.dept}`}
+              subtitle={`${equipName} · ${t.dept || "Hospital Asset"}`}
               icon={<FileText className="size-4" />}
             />
             <div className="px-6 pb-6 sm:px-7">
@@ -1471,12 +1494,19 @@ export function ServiceReport({ id }: { id: string }) {
                   <DefRow label="Report no." value={`SR-${t.id.replace("WO-", "")}`} />
                   <DefRow label="Work order" value={t.id} />
                   <DefRow label="Asset" value={equipName} />
-                  <DefRow label="Department" value={t.dept} />
+                  <DefRow label="Department" value={t.dept || "Clinical Dept"} />
                 </dl>
                 <dl>
                   <DefRow label="Service type" value={t.type} />
-                  <DefRow label="Engineer" value="Daniel Okafor · BME-2207" />
-                  <DefRow label="Date" value="07 Aug 2026" />
+                  <DefRow label="Engineer" value={t.engineer || "Daniel Okafor"} />
+                  <DefRow
+                    label="Date"
+                    value={new Date().toLocaleDateString("en-US", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  />
                   <DefRow label="Labour" value={t.estimate} />
                   <DefRow label="Outcome" value={<Pill tone="success">Returned to service</Pill>} />
                 </dl>
@@ -1521,7 +1551,7 @@ export function ServiceReport({ id }: { id: string }) {
                 <TextInput type="time" defaultValue="12:04" />
               </Field>
               <Field label="Clinical acceptance by">
-                <TextInput defaultValue="ICU Charge Nurse" />
+                <TextInput defaultValue={t.dept ? `${t.dept} Charge Nurse` : "Charge Nurse"} />
               </Field>
               <Field label="Acceptance status">
                 <SelectInput
@@ -1547,8 +1577,8 @@ export function ServiceReport({ id }: { id: string }) {
               <Meter value={100} tone="success" />
               <ul className="space-y-2 text-[12.5px]">
                 {[
-                  { label: "Work narrative complete", done: true },
-                  { label: "Safety readings recorded", done: true },
+                  { label: "Work narrative complete", done: !!workPerformed },
+                  { label: "Safety readings recorded", done: !!testResults },
                   { label: "Evidence attached", done: true },
                   { label: "Clinical signature captured", done: true },
                 ].map((r) => (
@@ -1575,10 +1605,9 @@ export function ServiceReport({ id }: { id: string }) {
             />
             <ul className="px-6 pb-6 sm:px-7">
               {[
-                "Department head — ICU",
-                "Biomedical lead — Anita Raghavan",
-                "Vendor — GE Healthcare",
-                "Compliance archive",
+                `Department head — ${t.dept || "Clinical"}`,
+                `Biomedical engineer — ${t.engineer || "Daniel Okafor"}`,
+                "Hospital compliance archive",
               ].map((d) => (
                 <li
                   key={d}
@@ -1605,9 +1634,37 @@ export function CompleteMaintenance({ id }: { id: string }) {
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closureNotes, setClosureNotes] = useState(
-    "All alarms cleared after sensor replacement. Unit ran 60 minutes on test lung without recurrence. Returned to ICU Bay 6 and accepted by the charge nurse.",
+    "Maintenance completed successfully. Unit ran full verification cycle without errors. Equipment returned to service and accepted.",
   );
+  const [gateStatus, setGateStatus] = useState({
+    checklist: true,
+    investigation: true,
+    evidence: true,
+    report: true,
+    safety: true,
+  });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!maintenance) return;
+    maintenanceApi
+      .get(maintenance._id)
+      .then((res) => {
+        if (res) {
+          const hasResponses = (res.checklistResponses?.length ?? 0) > 0;
+          const hasFail = res.checklistResponses?.some((r) => r.outcome === "FAIL");
+          const hasInv = !!(res.maintenance?.investigationId || res.maintenance?.rootCause);
+          setGateStatus({
+            checklist: hasResponses,
+            investigation: !hasFail || hasInv,
+            evidence: (res.evidence?.length ?? 0) > 0,
+            report: !!res.serviceReport,
+            safety: true,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [maintenance]);
 
   const handleCloseAndFile = async () => {
     if (!t) return;
@@ -1771,12 +1828,11 @@ export function CompleteMaintenance({ id }: { id: string }) {
             />
             <ul className="px-6 pb-6 sm:px-7">
               {[
-                { label: "Checklist or breakdown record completed", done: true },
-                { label: "Evidence attached to the work order", done: true },
-                { label: "Service report drafted and signed", done: true },
-                { label: "Electrical safety verification passed", done: true },
-                { label: "Clinical acceptance recorded", done: true },
-                { label: "Next PPM scheduled", done: true },
+                { label: "Checklist responses recorded", done: gateStatus.checklist },
+                { label: "Investigation and root cause recorded", done: gateStatus.investigation },
+                { label: "Evidence attached to the work order", done: gateStatus.evidence },
+                { label: "Service report drafted and submitted", done: gateStatus.report },
+                { label: "Electrical safety verification passed", done: gateStatus.safety },
               ].map((c) => (
                 <li
                   key={c.label}
@@ -1834,7 +1890,7 @@ export function CompleteMaintenance({ id }: { id: string }) {
                 "Work order archived to maintenance history",
                 "Service report distributed to department and vendor",
                 "Complaint ticket auto-resolved on acceptance",
-                "Next preventive job created for 07 Nov 2026",
+                "Next preventive job scheduled",
               ].map((n) => (
                 <li
                   key={n}

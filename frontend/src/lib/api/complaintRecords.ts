@@ -132,9 +132,27 @@ export function toComplaintPayload(
     engineersByName: Record<string, string>;
   },
 ): ComplaintFormPayload {
-  const equipmentId = lookups.equipmentByName[values["equipment"] ?? ""];
-  const departmentId = lookups.departmentsByName[values["dept"] ?? ""];
-  const engineerId = lookups.engineersByName[values["assignee"] ?? ""];
+  const equipmentId =
+    lookups.equipmentByName[values["equipment"] ?? ""] ||
+    lookups.equipmentByName[values["equipmentId"] ?? ""] ||
+    values["equipmentId"] ||
+    values["equipment"];
+  const departmentId =
+    lookups.departmentsByName[values["dept"] ?? ""] ||
+    lookups.departmentsByName[values["department"] ?? ""] ||
+    lookups.departmentsByName[values["departmentId"] ?? ""] ||
+    values["departmentId"] ||
+    values["dept"] ||
+    values["department"];
+  const engineerId =
+    lookups.engineersByName[values["assignee"] ?? ""] ||
+    lookups.engineersByName[values["engineer"] ?? ""] ||
+    lookups.engineersByName[values["engineerId"] ?? ""] ||
+    lookups.engineersByName[values["assignedEngineerId"] ?? ""] ||
+    values["engineerId"] ||
+    values["assignedEngineerId"] ||
+    values["assignee"] ||
+    values["engineer"];
   return {
     title: values["title"] ?? "",
     description: values["description"] ?? "",
