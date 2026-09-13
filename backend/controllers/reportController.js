@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 import Equipment from "../models/Equipment.js";
 import Complaint from "../models/Complaint.js";
 import WorkOrder from "../models/WorkOrder.js";
@@ -15,8 +15,9 @@ import InventoryItem from "../models/InventoryItem.js";
 import Calibration from "../models/Calibration.js";
 import PreventiveMaintenance from "../models/PreventiveMaintenance.js";
 import User from "../models/User.js";
-import { asyncHandler, ok } from "../services/apiError.js";
-import { assertDate } from "../services/validate.js";
+import { ApiError, asyncHandler, ok } from "../services/apiError.js";
+import { assertDate, findByAnyId } from "../services/validate.js";
+import { calculateEquipmentEhs, getBulkEquipmentEhs } from "../services/ehsService.js";
 
 /** Shared query-parameter parser: dateFrom, dateTo, departmentId, status, category, equipmentId, engineerId. */
 function buildFilter(query, user, { dateField = "createdAt" } = {}) {
@@ -873,3 +874,19 @@ export const exportModuleCsv = asyncHandler(async (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="${module}_export_${new Date().toISOString().slice(0, 10)}.csv"`);
   return res.send(csv);
 });
+
+export const equipmentEhsAnalytics = asyncHandler(async (req, res) => {
+  const eq = await findByAnyId(Equipment, req.params.equipmentId, "equipmentId");
+  if (!eq) throw new ApiError(404, "Equipment not found");
+  const data = await calculateEquipmentEhs(eq);
+  if (!data) throw new ApiError(404, "Health score could not be calculated");
+  return ok(res, data);
+});
+
+export const allEquipmentEhsAnalytics = asyncHandler(async (req, res) => {
+  const filter = buildFilter(req.query, req.user);
+  const equipmentList = await Equipment.find(filter).lean();
+  const data = await getBulkEquipmentEhs(equipmentList);
+  return ok(res, { items: data, total: data.length });
+});
+

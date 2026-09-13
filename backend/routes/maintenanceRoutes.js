@@ -30,6 +30,7 @@ router.post("/:id/checklist", engineer, c.submitChecklist);
 router.post("/:id/investigation", engineer, c.upsertInvestigation);
 router.put("/:id/investigation", engineer, c.upsertInvestigation);
 router.post("/:id/evidence", engineer, upload.array("files"), c.addEvidence);
+router.post("/:id/parts", engineer, c.recordPartsUsed);
 router.post("/:id/service-report", engineer, createServiceReport);
 router.post("/:id/complete", engineer, c.completeMaintenance);
 

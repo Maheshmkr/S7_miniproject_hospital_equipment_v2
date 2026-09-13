@@ -1,11 +1,10 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
-const mem = await MongoMemoryServer.create();
-process.env.MONGODB_URI = mem.getUri("hospital_equipment");
+import { setupTestDb } from "./test-db-helper.js";
+await setupTestDb("hospital_equipment_po_test");
 process.env.JWT_SECRET = "test-only-secret";
-process.env.PORT = "5099";
+process.env.PORT = "5089";
 await import("./server.js");
 await new Promise((r) => setTimeout(r, 3000));
-const B = "http://localhost:5099";
+const B = "http://localhost:5089";
 let pass = 0, fail = 0;
 const j = async (p, o = {}) => { const r = await fetch(B + p, { ...o, headers: { "content-type": "application/json", ...(o.headers || {}) } }); return [r.status, await r.json()]; };
 const t = (name, cond, extra = "") => { cond ? (pass++, console.log("PASS", name)) : (fail++, console.log("FAIL", name, extra)); };
@@ -158,5 +157,4 @@ t("warranty stats ok", (await getj("/api/warranties/stats", admin))[0] === 200);
 t("vendors module ok", (await getj("/api/vendors", admin))[0] === 200);
 
 console.log(`\n${pass} passed, ${fail} failed`);
-await mem.stop();
 process.exit(fail ? 1 : 0);

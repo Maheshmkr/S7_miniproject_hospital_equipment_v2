@@ -83,6 +83,35 @@ export const listWorkOrders = asyncHandler(async (req, res) => {
   if (req.user.role === "DEPARTMENT_STAFF" && req.user.departmentId) filter.departmentId = req.user.departmentId;
   if (req.user.role === "BIOMEDICAL_ENGINEER") {
     filter.engineerId = req.user._id;
+
+    // Guarantee any complaint assigned to this engineer (or unlinked) has an active work order
+    const unlinked = await Complaint.find({
+      $or: [
+        { assignedEngineerId: req.user._id },
+        { assignedEngineerId: { $in: [null, undefined] } },
+      ],
+      workOrderId: { $in: [null, undefined] },
+      status: { $nin: ["RESOLVED", "CLOSED", "CANCELLED"] },
+    });
+    for (const c of unlinked) {
+      const wo = await WorkOrder.create({
+        workOrderId: await nextCode(WorkOrder, "workOrderId", "WO-", 4),
+        title: `Investigate: ${c.title}`,
+        equipmentId: c.equipmentId,
+        complaintId: c._id,
+        departmentId: c.departmentId,
+        engineerId: req.user._id,
+        maintenanceType: "CORRECTIVE",
+        priority: c.priority || "MEDIUM",
+        status: "ASSIGNED",
+        scheduledDate: new Date(),
+        description: c.description || c.title,
+        createdBy: c.reportedBy || req.user._id,
+      });
+      c.workOrderId = wo._id;
+      c.assignedEngineerId = req.user._id;
+      await c.save();
+    }
   }
 
   const [items, total] = await Promise.all([
@@ -94,6 +123,34 @@ export const listWorkOrders = asyncHandler(async (req, res) => {
 
 /** Assigned Tasks for the signed-in engineer. */
 export const myWorkOrders = asyncHandler(async (req, res) => {
+  const unlinked = await Complaint.find({
+    $or: [
+      { assignedEngineerId: req.user._id },
+      { assignedEngineerId: { $in: [null, undefined] } },
+    ],
+    workOrderId: { $in: [null, undefined] },
+    status: { $nin: ["RESOLVED", "CLOSED", "CANCELLED"] },
+  });
+  for (const c of unlinked) {
+    const wo = await WorkOrder.create({
+      workOrderId: await nextCode(WorkOrder, "workOrderId", "WO-", 4),
+      title: `Investigate: ${c.title}`,
+      equipmentId: c.equipmentId,
+      complaintId: c._id,
+      departmentId: c.departmentId,
+      engineerId: req.user._id,
+      maintenanceType: "CORRECTIVE",
+      priority: c.priority || "MEDIUM",
+      status: "ASSIGNED",
+      scheduledDate: new Date(),
+      description: c.description || c.title,
+      createdBy: c.reportedBy || req.user._id,
+    });
+    c.workOrderId = wo._id;
+    c.assignedEngineerId = req.user._id;
+    await c.save();
+  }
+
   const filter = { engineerId: req.user._id };
   if (req.query.status) filter.status = req.query.status;
   const items = await populateContext(WorkOrder.find(filter)).sort({ scheduledDate: 1, createdAt: -1 });
@@ -126,14 +183,14 @@ export const createWorkOrder = asyncHandler(async (req, res) => {
   if (req.body.priority) assertEnum(req.body.priority, ["LOW", "MEDIUM", "HIGH", "CRITICAL"], "priority");
   if (req.body.status) assertEnum(req.body.status, WORK_ORDER_STATUSES, "status");
   let complaint = null;
+  let existing = null;
   if (req.body.complaintId) {
     complaint = await findByAnyId(Complaint, req.body.complaintId, "complaintId");
     if (!complaint) throw new ApiError(404, "Linked complaint not found");
     if (String(complaint.equipmentId) !== String(equipment._id)) {
       throw new ApiError(422, "Complaint does not belong to this equipment");
     }
-    const existing = await WorkOrder.findOne({ complaintId: complaint._id, status: { $ne: "CANCELLED" } });
-    if (existing) throw new ApiError(409, `${complaint.complaintId} already has work order ${existing.workOrderId}`);
+    existing = await WorkOrder.findOne({ complaintId: complaint._id, status: { $ne: "CANCELLED" } });
   }
 
   const departmentId = req.body.departmentId || complaint?.departmentId || equipment.departmentId;
@@ -146,7 +203,43 @@ export const createWorkOrder = asyncHandler(async (req, res) => {
       throw new ApiError(403, "You can only raise work orders for your own department");
     }
   }
-  const engineer = req.body.engineerId ? await loadAssignableEngineer(req.body.engineerId) : null;
+
+  let engineer = req.body.engineerId ? await loadAssignableEngineer(req.body.engineerId) : null;
+  if (!engineer) {
+    engineer = await User.findOne({ role: "BIOMEDICAL_ENGINEER", status: "ACTIVE" });
+  }
+
+  if (existing) {
+    if (req.body.title) existing.title = req.body.title;
+    if (engineer) existing.engineerId = engineer._id;
+    if (req.body.priority) existing.priority = req.body.priority;
+    if (req.body.description) existing.description = req.body.description;
+    if (req.body.maintenanceType) existing.maintenanceType = req.body.maintenanceType;
+    if (req.body.scheduledDate) existing.scheduledDate = assertDate(req.body.scheduledDate, "scheduledDate") || existing.scheduledDate;
+    if (req.body.status) existing.status = req.body.status;
+    await existing.save();
+
+    if (complaint) {
+      complaint.workOrderId = existing._id;
+      if (engineer) complaint.assignedEngineerId = engineer._id;
+      if (complaint.status === "OPEN" || complaint.status === "UNDER_REVIEW") {
+        complaint.status = "ASSIGNED";
+      }
+      await complaint.save();
+    }
+
+    await logAudit({
+      user: req.user,
+      action: "WORK_ORDER_ASSIGNED",
+      module: "WorkOrder",
+      recordId: existing.workOrderId,
+      workOrderId: existing._id,
+      equipmentId: existing.equipmentId,
+      description: `${existing.workOrderId} assigned for complaint ${complaint?.complaintId}`,
+    });
+
+    return created(res, existing);
+  }
 
   const wo = await WorkOrder.create({
     workOrderId: req.body.workOrderId || (await nextCode(WorkOrder, "workOrderId", "WO-", 4)),

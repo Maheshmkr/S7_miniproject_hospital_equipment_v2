@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const BASE_URL = "http://localhost:5000/api";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const PORT = 5000;
+const BASE_URL = `http://localhost:${PORT}/api`;
 
 async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -14,6 +21,32 @@ async function runTest() {
   console.log("  SENIOR MERN STACK DEBUGGING — FULL END-TO-END VERIFICATION FLOW");
   console.log("========================================================================\n");
 
+  let serverProcess = null;
+  let ready = false;
+  try {
+    const health = await api("/health");
+    if (health.status === 200) ready = true;
+  } catch {}
+
+  if (!ready) {
+    serverProcess = spawn("node", ["server.js"], {
+      cwd: __dirname,
+      env: { ...process.env, PORT: String(PORT), NODE_ENV: "test" },
+      stdio: "inherit",
+    });
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 400));
+      try {
+        const health = await api("/health");
+        if (health.status === 200) {
+          ready = true;
+          break;
+        }
+      } catch {}
+    }
+  }
+
+  try {
   // Step 1: Health check
   console.log("[STEP 1] Checking Backend API Health...");
   const health = await api("/health");
@@ -166,6 +199,9 @@ async function runTest() {
   console.log("========================================================================");
   console.log("  ALL END-TO-END CRITICAL FLOWS VERIFIED 100% OPERATIONAL");
   console.log("========================================================================\n");
+  } finally {
+    serverProcess?.kill();
+  }
 }
 
 runTest().catch((err) => {

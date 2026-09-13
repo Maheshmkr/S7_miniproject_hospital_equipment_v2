@@ -6,6 +6,12 @@ import dotenv from "dotenv";
 dotenv.config();
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const API_URL = "http://localhost:5000/api";
 
@@ -60,6 +66,32 @@ async function runAudit() {
   console.log("  MEDIXA FULL END-TO-END FLOW AUDIT & TEST SUITE");
   console.log("========================================================================");
 
+  let serverProcess = null;
+  let ready = false;
+  try {
+    const res = await fetch("http://localhost:5000/api/health");
+    if (res.ok) ready = true;
+  } catch {}
+
+  if (!ready) {
+    serverProcess = spawn("node", ["server.js"], {
+      cwd: __dirname,
+      env: { ...process.env, PORT: "5000", NODE_ENV: "test" },
+      stdio: "inherit",
+    });
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 400));
+      try {
+        const res = await fetch("http://localhost:5000/api/health");
+        if (res.ok) {
+          ready = true;
+          break;
+        }
+      } catch {}
+    }
+  }
+
+  try {
   // Connect to MongoDB to verify raw database state
   await mongoose.connect("mongodb://127.0.0.1:27017/hospital_equipment");
   const User = (await import("./models/User.js")).default;
@@ -299,8 +331,10 @@ async function runAudit() {
   console.log("\n========================================================================");
   console.log("  ALL 7 END-TO-END FLOW AUDIT SCENARIOS PASSED WITH 100% SUCCESS!");
   console.log("========================================================================\n");
-
-  await mongoose.disconnect();
+  } finally {
+    serverProcess?.kill();
+    await mongoose.disconnect();
+  }
 }
 
 runAudit().catch(err => {

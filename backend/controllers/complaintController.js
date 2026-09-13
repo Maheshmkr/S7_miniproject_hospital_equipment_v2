@@ -2,12 +2,14 @@ import Complaint, { COMPLAINT_STATUSES, COMPLAINT_TRANSITIONS, PRIORITIES } from
 import Equipment from "../models/Equipment.js";
 import User from "../models/User.js";
 import WorkOrder from "../models/WorkOrder.js";
+import Maintenance from "../models/Maintenance.js";
 import AuditLog from "../models/AuditLog.js";
 import { ApiError, asyncHandler, created, ok } from "../services/apiError.js";
 import { assertDate, assertEnum, findByAnyId, paginate, requireFields } from "../services/validate.js";
 import { logAudit } from "../services/auditService.js";
 import { nextCode, setComplaintStatus, setEquipmentStatus } from "../services/lifecycleService.js";
 import { loadEquipment } from "./equipmentController.js";
+import { recalculateEquipmentEhs } from "../services/ehsService.js";
 
 const load = async (id) => {
   const c = await findByAnyId(Complaint, id, "complaintId");
@@ -23,6 +25,14 @@ const sameId = (a, b) => Boolean(a && b && String(a) === String(b));
  */
 function assertComplaintAccess(complaint, user) {
   if (!user) throw new ApiError(401, "Authentication required");
+  if (user.role === "ADMINISTRATOR") return;
+  if (user.role === "DEPARTMENT_STAFF") {
+    const deptId = complaint.departmentId?._id || complaint.departmentId;
+    if (!sameId(deptId, user.departmentId)) {
+      throw new ApiError(403, "Access forbidden: cannot access complaints outside your department");
+    }
+    return;
+  }
 }
 
 /** Fields a caller may change through PUT — never ids, reporter or status. */
@@ -38,6 +48,9 @@ export const listComplaints = asyncHandler(async (req, res) => {
   if (equipmentId) filter.equipmentId = equipmentId;
   if (engineerId) filter.assignedEngineerId = engineerId;
   if (reportedBy) filter.reportedBy = reportedBy;
+  if (req.user?.role === "DEPARTMENT_STAFF") {
+    filter.departmentId = req.user.departmentId;
+  }
   const fromDate = assertDate(from, "from date");
   const toDate = assertDate(to, "to date");
   if (fromDate || toDate) {
@@ -83,12 +96,25 @@ export const createComplaint = asyncHandler(async (req, res) => {
   assertEnum(req.body.priority, PRIORITIES, "priority");
   const equipment = await loadEquipment(req.body.equipmentId);
 
+  if (req.user.role === "DEPARTMENT_STAFF") {
+    const equipDeptId = equipment.departmentId?._id || equipment.departmentId;
+    if (equipDeptId && !sameId(equipDeptId, req.user.departmentId)) {
+      throw new ApiError(403, "Department staff can only raise complaints for equipment in their own department");
+    }
+  }
+
   const departmentId = equipment.departmentId || req.body.departmentId || req.user.departmentId;
 
   const engineerId = req.body.engineerId || req.body.assignedEngineerId;
   let engineer = null;
   if (engineerId) {
     engineer = await User.findById(engineerId);
+    if (!engineer || engineer.role !== "BIOMEDICAL_ENGINEER") {
+      throw new ApiError(400, "Assignee must be a biomedical engineer");
+    }
+  } else {
+    // Automatically route to the single Biomedical Engineer in the hospital system
+    engineer = await User.findOne({ role: "BIOMEDICAL_ENGINEER", status: "ACTIVE" });
   }
 
   const complaint = await Complaint.create({
@@ -100,7 +126,7 @@ export const createComplaint = asyncHandler(async (req, res) => {
     title: req.body.title,
     description: req.body.description,
     priority: req.body.priority || "MEDIUM",
-    status: engineer ? "ASSIGNED" : "OPEN",
+    status: req.body.status || (engineerId ? "ASSIGNED" : "OPEN"),
   });
 
   if (engineer) {
@@ -125,6 +151,8 @@ export const createComplaint = asyncHandler(async (req, res) => {
   if (["CRITICAL", "HIGH"].includes(complaint.priority)) {
     await setEquipmentStatus(equipment, "UNDER_BREAKDOWN", req.user, `Breakdown reported via ${complaint.complaintId}`);
   }
+
+  await recalculateEquipmentEhs(equipment._id);
 
   await complaint.populate([
     { path: "equipmentId", select: "equipmentId name category status" },
@@ -217,6 +245,7 @@ export const updateComplaintStatus = asyncHandler(async (req, res) => {
     { path: "assignedEngineerId", select: "name initials" },
     { path: "reportedBy", select: "name" },
   ]);
+  await recalculateEquipmentEhs(complaint.equipmentId);
   return ok(res, complaint);
 });
 
@@ -342,7 +371,16 @@ export const addComplaintMessage = asyncHandler(async (req, res) => {
 
 export const deleteComplaint = asyncHandler(async (req, res) => {
   const complaint = await load(req.params.id);
-  if (complaint.workOrderId) throw new ApiError(409, "Complaint has a linked work order and cannot be deleted");
+  if (complaint.workOrderId) {
+    const wo = await WorkOrder.findById(complaint.workOrderId);
+    const hasMaintenance = await Maintenance.exists({ workOrderId: complaint.workOrderId });
+    if (hasMaintenance || (wo && wo.status !== "ASSIGNED")) {
+      throw new ApiError(409, "Complaint has active maintenance and cannot be deleted");
+    }
+    if (wo) {
+      await WorkOrder.deleteOne({ _id: wo._id });
+    }
+  }
   await complaint.deleteOne();
   await logAudit({
     user: req.user,

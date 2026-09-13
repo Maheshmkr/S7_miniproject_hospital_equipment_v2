@@ -9,11 +9,14 @@ import Evidence from "../models/Evidence.js";
 import ServiceReport from "../models/ServiceReport.js";
 import AuditLog from "../models/AuditLog.js";
 import Equipment from "../models/Equipment.js";
+import InventoryItem from "../models/InventoryItem.js";
 import { ApiError, asyncHandler, created, ok } from "../services/apiError.js";
 import { findByAnyId, paginate, requireFields } from "../services/validate.js";
 import { logAudit } from "../services/auditService.js";
 import { nextCode, setComplaintStatus, setEquipmentStatus } from "../services/lifecycleService.js";
 import { normaliseOutcome, resolveChecklistForEquipment } from "../services/checklistService.js";
+import { recordStockMovement } from "../services/inventoryService.js";
+import { recalculateEquipmentEhs } from "../services/ehsService.js";
 
 const load = async (id) => {
   const m = await findByAnyId(Maintenance, id, "maintenanceId");
@@ -625,6 +628,8 @@ export const completeMaintenance = asyncHandler(async (req, res) => {
     description: `${m.maintenanceId} completed · equipment returned to service`,
   });
 
+  await recalculateEquipmentEhs(m.equipmentId);
+
   return ok(res, { maintenance: m, workOrder: wo, equipment, serviceReport: report });
 });
 
@@ -633,3 +638,68 @@ export const maintenanceHistory = asyncHandler(async (req, res) => {
   assertReadAccess(m, req.user);
   return ok(res, await AuditLog.find({ maintenanceId: m._id }).sort({ timestamp: -1 }));
 });
+
+export const recordPartsUsed = asyncHandler(async (req, res) => {
+  const m = await load(req.params.id);
+  assertEngineer(m, req.user);
+  requireFields(req.body, ["quantity"]);
+
+  const { itemId, name, partNo, quantity, unitCost, notes } = req.body;
+  const qty = Number(quantity);
+  if (Number.isNaN(qty) || qty <= 0) throw new ApiError(400, "Quantity must be a positive number");
+
+  let recordedPart = null;
+
+  if (itemId) {
+    const item = await findByAnyId(InventoryItem, itemId, "itemId");
+    if (!item) throw new ApiError(404, "Inventory item not found");
+    if (item.availableQuantity < qty) {
+      throw new ApiError(422, `Insufficient inventory: only ${item.availableQuantity} available in stock`);
+    }
+
+    await recordStockMovement({
+      item,
+      type: "ISSUE",
+      quantity: qty,
+      user: req.user,
+      reference: m.maintenanceId,
+      reason: `Consumed in maintenance ${m.maintenanceId}`,
+      notes: notes || `Work Order: ${m.workOrderId}`,
+      relatedEquipmentId: m.equipmentId,
+      relatedWorkOrderId: m.workOrderId,
+      departmentId: m.departmentId,
+    });
+
+    recordedPart = {
+      name: item.name,
+      partNo: item.sku || item.itemId,
+      qty,
+      cost: (item.unitCost || 0) * qty,
+    };
+  } else {
+    recordedPart = {
+      name: name || "Custom Part",
+      partNo: partNo || "N/A",
+      qty,
+      cost: (Number(unitCost) || 0) * qty,
+    };
+  }
+
+  m.partsUsed = m.partsUsed || [];
+  m.partsUsed.push(recordedPart);
+  await m.save();
+
+  await logAudit({
+    user: req.user,
+    action: "PARTS_RECORDED",
+    module: "Maintenance",
+    recordId: m.maintenanceId,
+    maintenanceId: m._id,
+    equipmentId: m.equipmentId,
+    workOrderId: m.workOrderId,
+    description: `Recorded ${qty}x ${recordedPart.name} (${recordedPart.partNo}) used in ${m.maintenanceId}`,
+  });
+
+  return ok(res, { maintenance: m, partsUsed: m.partsUsed, added: recordedPart });
+});
+

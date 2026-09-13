@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import * as c from "../controllers/reportController.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { requireRole } from "../middleware/roleMiddleware.js";
@@ -50,5 +50,7 @@ analyticsRouter.get("/costs", c.costsAnalytics);
 analyticsRouter.get("/compliance", c.complianceAnalytics);
 analyticsRouter.get("/availability", c.availabilityAnalytics);
 analyticsRouter.get("/breakdowns", c.breakdownsAnalytics);
+analyticsRouter.get("/equipment/health-scores", c.allEquipmentEhsAnalytics);
+analyticsRouter.get("/equipment/:equipmentId/health-score", c.equipmentEhsAnalytics);
 
 export default reportRouter;

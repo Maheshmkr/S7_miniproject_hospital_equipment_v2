@@ -12,6 +12,8 @@ router.get("/:id/complaints", c.equipmentComplaints);
 router.get("/:id/maintenance", c.equipmentMaintenance);
 router.get("/:id/service-reports", c.equipmentServiceReports);
 router.get("/:id/audit", c.equipmentAudit);
+router.get("/:id/health-score", c.getEquipmentHealthScore);
+router.get("/:id/health-history", c.getEquipmentHealthHistory);
 router.get("/:equipmentId/checklist", c.equipmentChecklist);
 router.get("/:equipmentId/warranty", c.equipmentWarranty);
 router.post("/", requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"), c.createEquipment);

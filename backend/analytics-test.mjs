@@ -1,9 +1,7 @@
-﻿import { MongoMemoryServer } from "mongodb-memory-server";
+import { setupTestDb } from "./test-db-helper.js";
 import mongoose from "mongoose";
 
-console.log("Starting MongoMemoryServer...");
-const mem = await MongoMemoryServer.create();
-process.env.MONGODB_URI = mem.getUri("hospital_equipment");
+await setupTestDb("hospital_equipment_analytics_test");
 process.env.JWT_SECRET = "test-only-secret";
 process.env.PORT = "5199";
 

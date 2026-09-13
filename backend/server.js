@@ -45,6 +45,8 @@ app.use("/uploads", express.static(uploadDir));
 app.get("/api/health", (_req, res) =>
   res.json({
     success: true,
+    status: "ok",
+    database: dbStatus(),
     message: "Hospital Asset Management API is running",
     data: { database: dbStatus() },
   }),

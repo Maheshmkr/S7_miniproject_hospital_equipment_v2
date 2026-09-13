@@ -1,8 +1,7 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { setupTestDb } from "./test-db-helper.js";
 import assert from "node:assert/strict";
 
-const mem = await MongoMemoryServer.create();
-process.env.MONGODB_URI = mem.getUri("hospital_equipment");
+await setupTestDb("hospital_equipment_complaint_test");
 process.env.JWT_SECRET = "test-only-secret-complaint-2026";
 process.env.PORT = "5095";
 

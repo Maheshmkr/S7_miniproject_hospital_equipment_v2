@@ -1,10 +1,9 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
-const mem = await MongoMemoryServer.create();
-process.env.MONGODB_URI = mem.getUri("hospital_equipment");
+import { setupTestDb } from "./test-db-helper.js";
+await setupTestDb("hospital_equipment_auth_test");
 process.env.JWT_SECRET = "test-only-secret";
 process.env.PORT = "5099";
 const { default: app } = await import("./server.js");
-await new Promise((r) => setTimeout(r, 3000));
+await new Promise((r) => setTimeout(r, 1500));
 const B = "http://localhost:5099";
 const j = async (p, o) => { const r = await fetch(B + p, o); return [r.status, await r.json()]; };
 console.log("health", ...await j("/api/health"));

@@ -48,6 +48,7 @@ const equipmentSchema = new mongoose.Schema(
     healthScore: { type: Number, min: 0, max: 100, default: 100 },
     criticality: { type: String, enum: CRITICALITY, default: "MEDIUM", index: true },
     cost: { type: String, trim: true },
+    expectedUsefulLifeYears: { type: Number, default: 10, min: 1 },
     lastPreventiveDate: { type: Date },
     nextPreventiveDate: { type: Date },
     lastCalibrationDate: { type: Date },

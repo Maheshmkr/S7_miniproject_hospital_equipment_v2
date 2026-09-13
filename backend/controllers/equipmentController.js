@@ -12,6 +12,8 @@ import { assertDate, assertEnum, findByAnyId, paginate, requireFields } from "..
 import { logAudit } from "../services/auditService.js";
 import { nextCode, setEquipmentLifecycleStage, setEquipmentStatus } from "../services/lifecycleService.js";
 import { resolveChecklistForEquipment } from "../services/checklistService.js";
+import { calculateEquipmentEhs } from "../services/ehsService.js";
+import { getHealthScoreHistory } from "../services/healthScoreService.js";
 
 export const loadEquipment = async (id) => {
   const eq = await findByAnyId(Equipment, id, "equipmentId");
@@ -60,6 +62,11 @@ const normalizeBody = async (body) => {
     out.healthScore = n;
   } else {
     delete out.healthScore;
+  }
+  if (out.expectedUsefulLifeYears !== undefined && out.expectedUsefulLifeYears !== "") {
+    const n = Number(out.expectedUsefulLifeYears);
+    if (!Number.isNaN(n) && n > 0) out.expectedUsefulLifeYears = n;
+    else delete out.expectedUsefulLifeYears;
   }
   if (out.departmentId !== undefined) {
     if (out.departmentId === "" || out.departmentId === null) {
@@ -241,3 +248,20 @@ export const equipmentWarranty = asyncHandler(async (req, res) => {
   const eq = await loadEquipment(req.params.equipmentId || req.params.id);
   return ok(res, await Warranty.find({ equipmentId: eq._id }).sort({ endDate: 1 }));
 });
+
+export const getEquipmentHealthScore = asyncHandler(async (req, res) => {
+  const eq = await loadEquipment(req.params.id);
+  assertDepartmentAccess(req.user, eq);
+  const data = await calculateEquipmentEhs(eq);
+  if (!data) throw new ApiError(404, "Equipment health score could not be calculated");
+  return ok(res, data);
+});
+
+export const getEquipmentHealthHistory = asyncHandler(async (req, res) => {
+  const eq = await loadEquipment(req.params.id);
+  assertDepartmentAccess(req.user, eq);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+  const history = await getHealthScoreHistory(eq, limit);
+  return ok(res, history);
+});
+

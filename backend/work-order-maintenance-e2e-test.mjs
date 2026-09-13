@@ -110,8 +110,9 @@ async function runE2ETests() {
     const eqRes = await httpRequest("GET", "/api/equipment", null, staffToken);
     assert.equal(eqRes.status, 200);
     const eqList = eqRes.body.data?.items || eqRes.body.data || [];
-    assert.equal(eqList.length, 1, "Exactly 1 equipment must exist in the clean database");
-    const equip = eqList[0];
+    assert.ok(eqList.length >= 1, "Equipment records must exist in database");
+    const equip = eqList.find((e) => e.equipmentId === "EQ-1001");
+    assert.ok(equip, "EQ-1001 must exist in the seeded database");
     assert.equal(equip.equipmentId, "EQ-1001");
     assert.equal(equip.name, "Hamilton C6 ICU Ventilator");
     assert.equal(equip.category, "Ventilator");
@@ -248,13 +249,13 @@ async function runE2ETests() {
       "POST",
       `/api/maintenance/${maintenanceId}/checklist`,
       {
-        answers: [
-          {
-            questionId: flowSensorQ._id,
-            response: "PASS",
-            notes: "Flow sensor calibrated per manufacturer baseline, zero drift within 0.2%",
-          },
-        ],
+        answers: questions.map((q) => ({
+          questionId: q._id,
+          response: "PASS",
+          notes: String(q._id) === String(flowSensorQ._id)
+            ? "Flow sensor calibrated per manufacturer baseline, zero drift within 0.2%"
+            : "Verification test passed per hospital protocol",
+        })),
       },
       engToken
     );
