@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { apiEnabled } from "@/lib/api/client";
+import { equipmentApi } from "@/lib/api/equipmentApi";
 import {
   ClipboardCheck,
   FlaskConical,
@@ -350,6 +352,41 @@ export function ChecklistPage({ id }: { id: string }) {
   );
   const navigate = useNavigate();
   const [items, setItems] = useState<ChecklistItem[]>(configured);
+
+  useEffect(() => {
+    if (items.length === 0 && workOrder?.equipmentId && apiEnabled) {
+      equipmentApi
+        .checklist(workOrder.equipmentId)
+        .then((res) => {
+          if (res?.questions?.length) {
+            const loaded: ChecklistItem[] = res.questions.map((q: any) => ({
+              id: q._id || q.id,
+              questionId: q._id || q.id,
+              templateId: typeof q.templateId === "object" ? q.templateId?._id : q.templateId,
+              label: q.question || q.text || "",
+              responseType:
+                q.responseType?.toLowerCase() === "pass_fail"
+                  ? "passfail"
+                  : q.responseType?.toLowerCase() === "yes_no"
+                    ? "yesno"
+                    : (q.responseType?.toLowerCase() as any) || "passfail",
+              required: q.required !== false,
+              priority:
+                q.priority === "CRITICAL"
+                  ? "Critical"
+                  : q.priority === "IMPORTANT"
+                    ? "High"
+                    : "Medium",
+              helpText: q.helpText || undefined,
+              scope: q.scope || "equipment",
+            }));
+            setItems(loaded);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [items.length, workOrder?.equipmentId]);
+
   if (!workOrder) return <Missing id={id} />;
 
   const answered = items.filter(isAnswered).length;

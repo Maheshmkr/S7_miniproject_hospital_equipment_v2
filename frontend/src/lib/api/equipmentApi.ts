@@ -55,5 +55,22 @@ export const equipmentApi = {
       templates: ApiChecklistTemplate[];
       questions: ApiChecklistQuestion[];
     }>(`/equipment/${id}/checklist`, maintenanceType ? { maintenanceType } : undefined),
+  addChecklistQuestion: (
+    id: string,
+    payload: {
+      question: string;
+      responseType?: string;
+      priority?: string;
+      required?: boolean;
+      options?: string[];
+      helpText?: string;
+      scope?: "category" | "equipment";
+      maintenanceType?: string;
+    },
+  ) =>
+    post<{ question: ApiChecklistQuestion; template: ApiChecklistTemplate }>(
+      `/equipment/${id}/checklist/questions`,
+      payload,
+    ),
   warranty: (id: string) => get<ApiWarranty[]>(`/equipment/${id}/warranty`),
 };

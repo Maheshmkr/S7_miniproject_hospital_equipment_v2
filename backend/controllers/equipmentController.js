@@ -12,6 +12,8 @@ import { assertDate, assertEnum, findByAnyId, paginate, requireFields } from "..
 import { logAudit } from "../services/auditService.js";
 import { nextCode, setEquipmentLifecycleStage, setEquipmentStatus } from "../services/lifecycleService.js";
 import { resolveChecklistForEquipment } from "../services/checklistService.js";
+import ChecklistTemplate from "../models/ChecklistTemplate.js";
+import ChecklistQuestion from "../models/ChecklistQuestion.js";
 import { calculateEquipmentEhs } from "../services/ehsService.js";
 import { getHealthScoreHistory } from "../services/healthScoreService.js";
 
@@ -238,10 +240,115 @@ export const equipmentHistory = asyncHandler(async (req, res) => {
   return ok(res, { equipment: eq, complaints, workOrders, reports, events, warranties });
 });
 
+function normalizeResponseType(rt) {
+  if (!rt) return "PASS_FAIL";
+  const v = String(rt).toUpperCase().replace(/[-_\s]/g, "");
+  if (v === "PASSFAIL" || v === "PASS_FAIL") return "PASS_FAIL";
+  if (v === "YESNO" || v === "YES_NO") return "YES_NO";
+  if (v === "TEXT") return "TEXT";
+  if (v === "NUMBER") return "NUMBER";
+  if (v === "DROPDOWN") return "DROPDOWN";
+  if (v === "DATE") return "DATE";
+  if (v === "EVIDENCE") return "EVIDENCE";
+  return rt.toUpperCase();
+}
+
+function normalizePriority(p) {
+  if (!p) return "STANDARD";
+  const v = String(p).toUpperCase();
+  if (v === "CRITICAL" || v === "HIGH") return "CRITICAL";
+  if (v === "IMPORTANT" || v === "MEDIUM") return "IMPORTANT";
+  if (v === "STANDARD" || v === "LOW") return "STANDARD";
+  return "STANDARD";
+}
+
 export const equipmentChecklist = asyncHandler(async (req, res) => {
   const eq = await loadEquipment(req.params.equipmentId || req.params.id);
   const resolved = await resolveChecklistForEquipment(eq, req.query.maintenanceType);
   return ok(res, { equipment: { id: eq._id, equipmentId: eq.equipmentId, name: eq.name, category: eq.category }, ...resolved });
+});
+
+export const addEquipmentChecklistQuestion = asyncHandler(async (req, res) => {
+  const eq = await loadEquipment(req.params.equipmentId || req.params.id);
+  const text = req.body.question || req.body.text || req.body.label;
+  if (!text?.trim()) throw new ApiError(400, "Question text is required");
+
+  const scope = String(req.body.scope || "equipment").toLowerCase();
+  let template;
+
+  if (scope === "category") {
+    template = await ChecklistTemplate.findOne({
+      equipmentCategory: { $regex: new RegExp(`^${eq.category.trim()}$`, "i") },
+      equipmentId: { $in: [null, undefined] },
+    });
+    if (!template) {
+      template = await ChecklistTemplate.create({
+        name: `${eq.category} Diagnostic Checklist`,
+        equipmentCategory: eq.category,
+        maintenanceType: "ALL",
+        description: `Standard checklist for ${eq.category} assets`,
+        createdBy: req.user?._id,
+      });
+      await logAudit({
+        user: req.user,
+        action: "CHECKLIST_TEMPLATE_CREATED",
+        module: "Checklist",
+        recordId: template._id,
+        description: `Template ${template.name} created for category ${eq.category}`,
+      });
+    }
+  } else {
+    template = await ChecklistTemplate.findOne({ equipmentId: eq._id });
+    if (!template) {
+      template = await ChecklistTemplate.create({
+        name: `${eq.name} (${eq.equipmentId}) Checklist`,
+        equipmentId: eq._id,
+        equipmentCategory: eq.category,
+        maintenanceType: "ALL",
+        description: `Asset-specific checklist for ${eq.name}`,
+        createdBy: req.user?._id,
+      });
+      await logAudit({
+        user: req.user,
+        action: "CHECKLIST_TEMPLATE_CREATED",
+        module: "Checklist",
+        recordId: template._id,
+        equipmentId: eq._id,
+        description: `Asset template ${template.name} created for ${eq.equipmentId}`,
+      });
+    }
+  }
+
+  const count = await ChecklistQuestion.countDocuments({ templateId: template._id });
+  const responseType = normalizeResponseType(req.body.responseType);
+  const priority = normalizePriority(req.body.priority);
+
+  const question = await ChecklistQuestion.create({
+    templateId: template._id,
+    question: text.trim(),
+    responseType,
+    options: Array.isArray(req.body.options)
+      ? req.body.options
+      : typeof req.body.options === "string"
+        ? req.body.options.split(",").map((s) => s.trim()).filter(Boolean)
+        : [],
+    required: req.body.required !== false,
+    priority,
+    order: req.body.order ?? count,
+    helpText: req.body.helpText?.trim() || undefined,
+    active: true,
+  });
+
+  await logAudit({
+    user: req.user,
+    action: "CHECKLIST_QUESTION_CREATED",
+    module: "Checklist",
+    recordId: question._id,
+    equipmentId: eq._id,
+    description: `Checklist question "${question.question}" added for ${eq.equipmentId}`,
+  });
+
+  return created(res, { question, template });
 });
 
 export const equipmentWarranty = asyncHandler(async (req, res) => {

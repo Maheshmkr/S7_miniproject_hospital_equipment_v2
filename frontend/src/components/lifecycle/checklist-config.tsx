@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardList, ArrowDown, ArrowUp, Layers, Plus, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Panel, PanelHead, PageHeader, Pill, EmptyState } from "@/components/ui/primitives";
 import { ActionBtn, Crumbs, Field, inputCls } from "./kit";
 import { useChecklistConfig, useLifecycle } from "@/lib/lifecycle/store";
 import { actions } from "@/lib/lifecycle/repository";
+import { apiEnabled } from "@/lib/api/client";
+import { equipmentApi } from "@/lib/api/equipmentApi";
+import { checklistsApi } from "@/lib/api/checklistsApi";
+import { useEquipmentRecord } from "@/lib/api/useEquipment";
 import {
   checklistResponseLabels,
   checklistResponseTypes,
@@ -205,10 +209,113 @@ function AddQuestion({ onAdd, label }: { onAdd: (draft: Draft) => void; label: s
 
 export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
   const { run } = useLifecycle();
-  const { asset, templates, categoryQuestions, equipmentQuestions, resolved } =
-    useChecklistConfig(equipmentId);
+  const live = useEquipmentRecord(equipmentId);
+  const {
+    asset: localAsset,
+    templates: localTemplates,
+    categoryQuestions: localCatQuestions,
+    equipmentQuestions: localEqQuestions,
+    resolved: localResolved,
+  } = useChecklistConfig(equipmentId);
+
+  // Asset resolved from local state or live backend record
+  const asset =
+    localAsset ||
+    (live.item
+      ? {
+          id: live.item.equipmentId || live.item._id,
+          name: live.item.name,
+          category: live.item.category,
+          status: (live.item.status as any) || "Active",
+        }
+      : null);
+
+  const [apiData, setApiData] = useState<{
+    templates: any[];
+    questions: any[];
+  } | null>(null);
+
+  const fetchChecklist = useCallback(async () => {
+    if (!apiEnabled || !equipmentId) return;
+    try {
+      const res = await equipmentApi.checklist(equipmentId);
+      if (res) {
+        setApiData({ templates: res.templates || [], questions: res.questions || [] });
+      }
+    } catch {
+      // ignore
+    }
+  }, [equipmentId]);
+
+  useEffect(() => {
+    void fetchChecklist();
+  }, [fetchChecklist]);
+
+  const questionsFromApi: ChecklistQuestion[] = useMemo(() => {
+    if (!apiData?.questions) return [];
+    return apiData.questions.map((q: any) => {
+      const respType =
+        q.responseType?.toLowerCase() === "pass_fail"
+          ? "passfail"
+          : q.responseType?.toLowerCase() === "yes_no"
+            ? "yesno"
+            : (q.responseType?.toLowerCase() as ChecklistResponseType) || "passfail";
+      const prio =
+        q.priority === "CRITICAL"
+          ? "Critical"
+          : q.priority === "IMPORTANT"
+            ? "High"
+            : "Medium";
+      return {
+        id: q._id || q.id,
+        templateId: typeof q.templateId === "object" ? q.templateId?._id : q.templateId,
+        equipmentId: q.scope === "equipment" ? (equipmentId || asset?.id) : undefined,
+        category: asset?.category || "",
+        text: q.question || q.text || "",
+        responseType: respType,
+        options: q.options || [],
+        priority: prio as ChecklistPriority,
+        required: q.required !== false,
+        helpText: q.helpText || "",
+        order: q.order ?? 0,
+        active: q.active !== false,
+      };
+    });
+  }, [apiData, equipmentId, asset]);
+
+  const useLive = apiEnabled && apiData !== null && apiData.questions.length > 0;
+  const templates = (useLive ? apiData?.templates : localTemplates) || [];
+  const template = templates.find((t) => t.active) ?? templates[0];
+
+  const categoryQuestions = useLive
+    ? questionsFromApi.filter((q) => !q.equipmentId).sort((a, b) => a.order - b.order)
+    : localCatQuestions;
+
+  const equipmentQuestions = useLive
+    ? questionsFromApi.filter((q) => !!q.equipmentId).sort((a, b) => a.order - b.order)
+    : localEqQuestions;
+
+  const resolved = useLive
+    ? questionsFromApi.filter((q) => q.active).sort((a, b) => (a.equipmentId ? 1 : 0) - (b.equipmentId ? 1 : 0) || a.order - b.order)
+    : localResolved;
 
   if (!asset) {
+    if (live.loading) {
+      return (
+        <div className="space-y-6">
+          <PageHeader
+            eyebrow="Maintenance configuration"
+            title="Loading equipment…"
+            description="Fetching asset details from the equipment register."
+          />
+          <Panel>
+            <div className="py-16 text-center text-[13px] text-muted-foreground">
+              Loading equipment profile…
+            </div>
+          </Panel>
+        </div>
+      );
+    }
     return (
       <div className="space-y-6">
         <PageHeader
@@ -228,18 +335,60 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
     );
   }
 
-  const template = templates.find((t) => t.active) ?? templates[0];
+  const assetId = asset.id || equipmentId;
+  const assetName = asset.name || "Equipment";
+  const assetCategory = asset.category || "Medical Equipment";
 
-  const add = (draft: Draft, scope: "category" | "equipment") => {
-    if (!template) {
-      toast.error("No checklist template exists for this category yet.");
-      return;
+  const add = async (draft: Draft, scope: "category" | "equipment") => {
+    if (!asset) return;
+
+    if (apiEnabled) {
+      try {
+        await equipmentApi.addChecklistQuestion(equipmentId, {
+          question: draft.text.trim(),
+          responseType: draft.responseType,
+          priority: draft.priority,
+          required: draft.required,
+          options:
+            draft.responseType === "dropdown"
+              ? draft.options
+                  .split(",")
+                  .map((o) => o.trim())
+                  .filter(Boolean)
+              : undefined,
+          helpText: draft.helpText.trim() || undefined,
+          scope,
+        });
+        toast.success(
+          scope === "equipment"
+            ? `Added question specific to ${assetName}`
+            : `Added category question for ${assetCategory}`,
+        );
+        await fetchChecklist();
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to save checklist question to database.");
+      }
     }
+
+    // Auto-create local template if one doesn't exist yet so it never blocks
+    let targetTemplateId = template?.id;
+    if (!targetTemplateId) {
+      const fallbackTemplate = {
+        name: `${assetCategory} Diagnostic Checklist`,
+        category: assetCategory,
+        description: `Checklist for ${assetCategory}`,
+        maintenanceType: "All" as const,
+        active: true,
+      };
+      run((s, a) => actions.saveChecklistTemplate(s, a, fallbackTemplate));
+      targetTemplateId = `CT-${assetCategory.toUpperCase().replace(/\s+/g, "_")}`;
+    }
+
     run((s, a) =>
       actions.saveChecklistQuestion(s, a, {
-        templateId: template.id,
-        category: asset.category,
-        ...(scope === "equipment" ? { equipmentId } : {}),
+        templateId: targetTemplateId,
+        category: assetCategory,
+        ...(scope === "equipment" ? { equipmentId: assetId } : {}),
         maintenanceType: "All",
         text: draft.text.trim(),
         responseType: draft.responseType,
@@ -257,7 +406,14 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
         active: true,
       }),
     );
-    toast.success("Checklist question added");
+
+    if (!apiEnabled) {
+      toast.success(
+        scope === "equipment"
+          ? `Added question specific to ${assetName}`
+          : `Added category question for ${assetCategory}`,
+      );
+    }
   };
 
   const rowActions = (q: ChecklistQuestion, index: number) => (
@@ -266,13 +422,29 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
       question={q}
       index={index}
       onMove={(dir) => run((s, a) => actions.moveChecklistQuestion(s, a, q.id, dir))}
-      onDelete={() => {
+      onDelete={async () => {
+        if (apiEnabled && q.id && !q.id.startsWith("CQ-")) {
+          try {
+            await checklistsApi.deleteQuestion(q.id);
+            await fetchChecklist();
+          } catch {
+            // ignore
+          }
+        }
         run((s, a) => actions.deleteChecklistQuestion(s, a, q.id));
         toast.success("Question removed");
       }}
-      onToggle={() =>
-        run((s, a) => actions.saveChecklistQuestion(s, a, { ...q, active: !q.active }))
-      }
+      onToggle={async () => {
+        if (apiEnabled && q.id && !q.id.startsWith("CQ-")) {
+          try {
+            await checklistsApi.updateQuestion(q.id, { active: !q.active });
+            await fetchChecklist();
+          } catch {
+            // ignore
+          }
+        }
+        run((s, a) => actions.saveChecklistQuestion(s, a, { ...q, active: !q.active }));
+      }}
     />
   );
 
@@ -281,18 +453,18 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
       <Crumbs
         trail={[
           { label: "Equipment", to: "/equipment" },
-          { label: asset.id, to: `/equipment/${asset.id}` },
+          { label: assetId, to: `/equipment/${assetId}` },
           { label: "Maintenance checklist" },
         ]}
       />
       <PageHeader
-        eyebrow={`${asset.id} · ${asset.category}`}
+        eyebrow={`${assetId} · ${assetCategory}`}
         title="Maintenance checklist configuration"
         description="Questions defined here are what biomedical engineers answer during maintenance. Category questions apply to every asset in the category; asset-specific questions apply to this unit only."
         actions={
           <div className="flex items-center gap-2">
             <Pill tone="primary">{resolved.length} active question(s)</Pill>
-            <ActionBtn variant="ghost" to={`/equipment/${asset.id}`}>
+            <ActionBtn variant="ghost" to={`/equipment/${assetId}`}>
               Back to asset
             </ActionBtn>
           </div>
@@ -303,10 +475,10 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
         <div className="space-y-6">
           <Panel>
             <PanelHead
-              title={`Category checklist — ${asset.category}`}
+              title={`Category checklist — ${assetCategory}`}
               subtitle={
                 template
-                  ? `${template.name} · inherited by every ${asset.category} asset`
+                  ? `${template.name} · inherited by every ${assetCategory} asset`
                   : "No template configured for this category yet."
               }
               icon={<Layers className="size-4" />}
@@ -325,7 +497,7 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
 
           <Panel>
             <PanelHead
-              title={`Asset-specific checklist — ${asset.name}`}
+              title={`Asset-specific checklist — ${assetName}`}
               subtitle="Extra questions that only appear on work orders for this unit."
               icon={<Wrench className="size-4" />}
             />

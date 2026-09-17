@@ -15,6 +15,11 @@ router.get("/:id/audit", c.equipmentAudit);
 router.get("/:id/health-score", c.getEquipmentHealthScore);
 router.get("/:id/health-history", c.getEquipmentHealthHistory);
 router.get("/:equipmentId/checklist", c.equipmentChecklist);
+router.post(
+  "/:equipmentId/checklist/questions",
+  requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"),
+  c.addEquipmentChecklistQuestion,
+);
 router.get("/:equipmentId/warranty", c.equipmentWarranty);
 router.post("/", requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"), c.createEquipment);
 router.put("/:id", requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"), c.updateEquipment);

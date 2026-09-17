@@ -56,19 +56,25 @@ export function resolveChecklistQuestions(
   equipmentId: string,
   maintenanceType?: MaintenanceType,
 ): ChecklistQuestion[] {
-  const asset = state.equipment.find((e) => e.id === equipmentId);
+  const asset = state.equipment.find(
+    (e) => e.id === equipmentId || (e as any).equipmentId === equipmentId,
+  );
   if (!asset) return [];
   const templates = new Set(
     (state.checklistTemplates ?? [])
-      .filter((t) => t.active && t.category === asset.category)
+      .filter((t) => t.active && t.category?.toLowerCase() === asset.category?.toLowerCase())
       .map((t) => t.id),
   );
   return (state.checklistQuestions ?? [])
     .filter(
       (q) =>
         q.active &&
-        templates.has(q.templateId) &&
-        (!q.equipmentId || q.equipmentId === equipmentId) &&
+        (templates.has(q.templateId) ||
+          q.equipmentId === equipmentId ||
+          (asset && q.equipmentId === asset.id)) &&
+        (!q.equipmentId ||
+          q.equipmentId === equipmentId ||
+          (asset && q.equipmentId === asset.id)) &&
         (q.maintenanceType === "All" || !maintenanceType || q.maintenanceType === maintenanceType),
     )
     .sort((a, b) => (a.equipmentId ? 1 : 0) - (b.equipmentId ? 1 : 0) || a.order - b.order);

@@ -91,17 +91,21 @@ export function useLifecycle() {
 export function useChecklistConfig(equipmentId: string) {
   const { state } = useLifecycle();
   return useMemo(() => {
-    const asset = state.equipment.find((e) => e.id === equipmentId);
-    const templates = (state.checklistTemplates ?? []).filter(
-      (t) => t.category === asset?.category,
+    const asset = state.equipment.find(
+      (e) => e.id === equipmentId || (e as any).equipmentId === equipmentId,
     );
-    const all = (state.checklistQuestions ?? []).filter((q) => q.category === asset?.category);
+    const templates = (state.checklistTemplates ?? []).filter(
+      (t) => t.category?.toLowerCase() === asset?.category?.toLowerCase(),
+    );
+    const all = (state.checklistQuestions ?? []).filter(
+      (q) => !asset?.category || q.category?.toLowerCase() === asset.category.toLowerCase(),
+    );
     return {
       asset,
       templates,
       categoryQuestions: all.filter((q) => !q.equipmentId).sort((a, b) => a.order - b.order),
       equipmentQuestions: all
-        .filter((q) => q.equipmentId === equipmentId)
+        .filter((q) => q.equipmentId === equipmentId || (asset && q.equipmentId === asset.id))
         .sort((a, b) => a.order - b.order),
       resolved: resolveChecklistQuestions(state, equipmentId),
     };
