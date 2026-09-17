@@ -30,11 +30,26 @@ import { analyticsRouter, reportRouter } from "./routes/reportRoutes.js";
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+const allowedOrigins = (process.env.CLIENT_URL || process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim());
+
 app.use(
   cors({
-    origin: (process.env.CLIENT_URL || process.env.FRONTEND_URL || "http://localhost:5173")
-      .split(",")
-      .map((s) => s.trim()),
+    origin: (origin, callback) => {
+      // Allow non-browser requests (e.g., curl, mobile, server-to-server)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes("*") ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   }),
 );
