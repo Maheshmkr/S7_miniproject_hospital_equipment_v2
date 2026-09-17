@@ -8,7 +8,7 @@ export function notFound(req, _res, next) {
 export function errorHandler(err, _req, res, _next) {
   const isApiError = err instanceof ApiError;
   let status = isApiError ? err.status : 500;
-  let message = isApiError ? err.message : "Something went wrong";
+  let message = err.message || "Something went wrong";
 
   if (err.name === "ValidationError") {
     status = 400;
