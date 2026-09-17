@@ -20,28 +20,29 @@ const statusMap: Record<string, LifecycleEquipment["status"]> = {
 };
 
 /** Equipment master derived from the existing shared mock registry — no duplicates. */
-const derived: LifecycleEquipment[] = baseEquipment.map((e) => ({
-  id: e.id,
-  name: e.name,
-  category: e.category,
-  department: e.dept,
-  vendor: e.vendor,
-  model: e.specs.model,
-  serial: e.specs.serial,
-  status: statusMap[e.status] ?? "Active",
-  health: e.health,
-  installed: e.specs.installed,
-  location: e.specs.location,
-  cost: e.cost,
-  lastPreventive: e.specs.lastService,
-  nextPreventive: e.specs.nextService,
-  preventiveOverdue: e.specs.nextService.toLowerCase().includes("overdue"),
-  documents: [
-    { name: `${e.id}-user-manual.pdf`, kind: "Manual", when: e.specs.installed },
-    { name: `${e.id}-installation-certificate.pdf`, kind: "Certificate", when: e.specs.installed },
-    { name: `${e.id}-last-calibration.pdf`, kind: "Calibration", when: e.specs.lastService },
-  ],
-}));
+const getDerivedEquipment = (): LifecycleEquipment[] =>
+  (baseEquipment || []).map((e) => ({
+    id: e.id,
+    name: e.name,
+    category: e.category,
+    department: e.dept,
+    vendor: e.vendor,
+    model: e.specs?.model || "",
+    serial: e.specs?.serial || "",
+    status: (statusMap[e.status] ?? "Active") as LifecycleEquipment["status"],
+    health: e.health,
+    installed: e.specs?.installed || "",
+    location: e.specs?.location || "",
+    cost: e.cost,
+    lastPreventive: e.specs?.lastService || "",
+    nextPreventive: e.specs?.nextService || "",
+    preventiveOverdue: (e.specs?.nextService || "").toLowerCase().includes("overdue"),
+    documents: [
+      { name: `${e.id}-user-manual.pdf`, kind: "Manual", when: e.specs?.installed || "" },
+      { name: `${e.id}-installation-certificate.pdf`, kind: "Certificate", when: e.specs?.installed || "" },
+      { name: `${e.id}-last-calibration.pdf`, kind: "Calibration", when: e.specs?.lastService || "" },
+    ],
+  }));
 
 const scenarioAsset: LifecycleEquipment = {
   id: "EQ-1001",
@@ -630,7 +631,7 @@ const checklistQuestions: ChecklistQuestion[] = [
 
 export function seedState(): LifecycleState {
   return {
-    equipment: [scenarioAsset, ...derived],
+    equipment: [scenarioAsset, ...getDerivedEquipment()],
     complaints,
     workOrders,
     reports,

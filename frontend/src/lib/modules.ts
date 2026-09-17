@@ -118,11 +118,11 @@ export const toISODate = (v: string) => {
   return `${m[3]}-${String(mi + 1).padStart(2, "0")}-${m[1]!.padStart(2, "0")}`;
 };
 
-const equipmentRecords: ModuleRecord[] = equipment.map((e) => ({
+const equipmentRecords: ModuleRecord[] = (equipment || []).map((e) => ({
   id: e.id,
   title: e.name,
   subtitle: `${e.dept} · ${e.vendor}`,
-  status: statusTone[e.status].label,
+  status: statusTone?.[e.status]?.label ?? "Operational",
   tone:
     e.status === "operational"
       ? "success"
@@ -133,7 +133,7 @@ const equipmentRecords: ModuleRecord[] = equipment.map((e) => ({
           : "neutral",
   score: e.health,
   scoreLabel: "Health",
-  cells: [e.id, e.name, e.category, e.dept, statusTone[e.status].label, `${e.health}%`],
+  cells: [e.id, e.name, e.category, e.dept, statusTone?.[e.status]?.label ?? "Operational", `${e.health}%`],
   meta: [
     { label: "Category", value: e.category },
     { label: "Department", value: e.dept },
@@ -172,7 +172,7 @@ const equipmentRecords: ModuleRecord[] = equipment.map((e) => ({
 
 /* --------------------------------- Complaints --------------------------------- */
 
-const complaintRecords: ModuleRecord[] = complaints.map((c) => ({
+const complaintRecords: ModuleRecord[] = (complaints || []).map((c) => ({
   id: c.id,
   title: c.title,
   subtitle: `${c.equipment} · ${c.dept}`,
@@ -201,7 +201,7 @@ const complaintRecords: ModuleRecord[] = complaints.map((c) => ({
 
 /* -------------------------------- Maintenance --------------------------------- */
 
-const maintenanceRecords: ModuleRecord[] = maintenance.map((m) => ({
+const maintenanceRecords: ModuleRecord[] = (maintenance || []).map((m) => ({
   id: m.id,
   title: m.task,
   subtitle: `${m.equipment} · ${m.dept}`,
@@ -223,7 +223,7 @@ const maintenanceRecords: ModuleRecord[] = maintenance.map((m) => ({
 
 /* -------------------------------- Departments --------------------------------- */
 
-const departmentRecords: ModuleRecord[] = departments.map((d) => ({
+const departmentRecords: ModuleRecord[] = (departments || []).map((d) => ({
   id: slug(d.name),
   title: d.name,
   subtitle: `${d.staff} staff · ${d.assets} assets`,
@@ -252,7 +252,7 @@ const departmentRecords: ModuleRecord[] = departments.map((d) => ({
 
 /* ----------------------------------- Users ------------------------------------ */
 
-const userRecords: ModuleRecord[] = users.map((u) => ({
+const userRecords: ModuleRecord[] = (users || []).map((u) => ({
   id: slug(u.name),
   title: u.name,
   subtitle: `${u.role} · ${u.dept}`,
@@ -274,7 +274,7 @@ const userRecords: ModuleRecord[] = users.map((u) => ({
 
 /* ---------------------------------- Warranty ---------------------------------- */
 
-const warrantyRecords: ModuleRecord[] = warranties.map((w) => ({
+const warrantyRecords: ModuleRecord[] = (warranties || []).map((w) => ({
   id: w.id,
   title: w.vendor,
   subtitle: `${w.type} · ${w.assets} assets`,
@@ -504,7 +504,7 @@ export const modules = {
         name: "dept",
         label: "Department",
         type: "select",
-        options: departments.map((d) => d.name),
+        options: (departments || []).map((d) => d.name),
       },
       { name: "vendor", label: "Vendor", type: "text", placeholder: "Siemens Healthineers" },
       {
@@ -583,13 +583,13 @@ export const modules = {
         name: "equipment",
         label: "Equipment",
         type: "select",
-        options: equipment.map((e) => e.name),
+        options: (equipment || []).map((e) => e.name),
       },
       {
         name: "dept",
         label: "Department",
         type: "select",
-        options: departments.map((d) => d.name),
+        options: (departments || []).map((d) => d.name),
       },
       {
         name: "priority",
@@ -650,7 +650,7 @@ export const modules = {
         name: "equipment",
         label: "Equipment",
         type: "select",
-        options: equipment.map((e) => e.name),
+        options: (equipment || []).map((e) => e.name),
       },
       {
         name: "type",
@@ -703,7 +703,7 @@ export const modules = {
     records: departmentRecords,
     fields: [
       { name: "name", label: "Department name", type: "text", placeholder: "Radiology" },
-      { name: "head", label: "Department head", type: "select", options: users.map((u) => u.name) },
+      { name: "head", label: "Department head", type: "select", options: (users || []).map((u) => u.name) },
       {
         name: "wing",
         label: "Building wing",
@@ -730,7 +730,7 @@ export const modules = {
     trend: trend([86, 88, 89, 90, 91, 92], [93, 94, 95, 96, 97, 98]),
     seriesA: "Score",
     seriesB: "Uptime",
-    breakdown: departments.map((d) => ({ name: d.name, value: d.assets })),
+    breakdown: (departments || []).map((d) => ({ name: d.name, value: d.assets })),
   },
   users: {
     key: "users",
@@ -768,7 +768,7 @@ export const modules = {
         name: "dept",
         label: "Department",
         type: "select",
-        options: departments.map((d) => d.name),
+        options: (departments || []).map((d) => d.name),
       },
       {
         name: "shift",
@@ -1077,7 +1077,7 @@ export const modules = {
         name: "departmentId",
         label: "Department",
         type: "select",
-        options: departments.map((d) => d.name),
+        options: (departments || []).map((d) => d.name),
       },
       { name: "batchNumber", label: "Batch number", type: "text", placeholder: "BATCH-2026-01" },
       { name: "serialNumber", label: "Serial number", type: "text", placeholder: "SN-98214" },
