@@ -44,6 +44,7 @@ import { Meter, Panel, PanelHead, Pill, Ring, EmptyState } from "@/components/ui
 import { apiEnabled } from "@/lib/api/client";
 import { analyticsApi, type DashboardAnalytics } from "@/lib/api/analyticsApi";
 import { useEquipmentList, useEquipmentRecord } from "@/lib/api/useEquipment";
+import { useAuth } from "@/lib/auth";
 import { useComplaintList } from "@/lib/api/useComplaints";
 import { useMaintenanceList } from "@/lib/api/useMaintenance";
 import {
@@ -104,6 +105,9 @@ function useStaffDashboardAnalytics() {
 }
 
 export function StaffDashboard() {
+  const { user } = useAuth();
+  const activeDeptName = user?.departmentName || staffDepartment.name;
+  const firstName = user?.name ? user.name.split(" ")[0] : staffProfile.name.split(" ")[0];
   const { data: analytics, loading: analyticsLoading } = useStaffDashboardAnalytics();
   const { total: liveComplaintsCount } = useComplaintList(
     apiEnabled ? { status: "OPEN" } : { limit: 0 },
@@ -167,8 +171,8 @@ export function StaffDashboard() {
     <div className="mx-auto max-w-[1600px] space-y-6">
       <StaffCrumbs trail={[{ label: "Dashboard" }]} />
       <StaffHero
-        eyebrow={`${staffDepartment.name} · ${staffDepartment.code}`}
-        title={`Welcome back, ${staffProfile.name.split(" ")[0]}`}
+        eyebrow={`${activeDeptName} · Clinical Register`}
+        title={`Welcome back, ${firstName}`}
         description={`${stats.total} assets under your department, ${stats.open} open complaints and ${stats.upcoming} maintenance visits scheduled. Department health score is ${stats.health}%.`}
         actions={
           <>
@@ -191,7 +195,7 @@ export function StaffDashboard() {
         <StatCard
           label="Total equipment"
           value={stats.total}
-          hint="Assigned to Radiology"
+          hint={`Assigned to ${activeDeptName}`}
           tone="primary"
           to="/staff/equipment"
           icon={<Cpu className="size-4" />}
@@ -441,6 +445,8 @@ export function StaffDashboard() {
 const statuses = ["All", "Operational", "Under Maintenance", "Critical", "Idle"] as const;
 
 export function StaffEquipmentWorkspace() {
+  const { user } = useAuth();
+  const activeDeptName = user?.departmentName || staffDepartment.name;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<(typeof statuses)[number]>("All");
   const [category, setCategory] = useState("All");
@@ -558,7 +564,7 @@ export function StaffEquipmentWorkspace() {
       <StaffHero
         eyebrow="Equipment"
         title="Department equipment"
-        description={`Every asset assigned to ${staffDepartment.name}. You have read access — report an issue to request service.`}
+        description={`Every asset assigned to ${activeDeptName}. You have read access — report an issue to request service.`}
         actions={
           <ActionLink
             to="/staff/complaints/new"
@@ -575,7 +581,7 @@ export function StaffEquipmentWorkspace() {
         <StatCard
           label="Total assets"
           value={stats.total}
-          hint="Radiology register"
+          hint={`${activeDeptName} register`}
           tone="primary"
           icon={<Cpu className="size-4" />}
         />

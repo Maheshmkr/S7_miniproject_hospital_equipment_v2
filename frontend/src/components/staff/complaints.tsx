@@ -101,32 +101,55 @@ export function RegisterComplaint() {
 
   useEffect(() => {
     if (apiEnabled && liveEquipment && liveEquipment.length > 0) {
-      const firstId = liveEquipment[0]._id;
-      setForm((f) => ({ ...f, equipmentId: firstId }));
+      const exists = liveEquipment.some(
+        (e) => e._id === form.equipmentId || e.equipmentId === form.equipmentId,
+      );
+      if (!exists) {
+        setForm((f) => ({ ...f, equipmentId: liveEquipment[0]._id }));
+      }
     }
-  }, [liveEquipment]);
+  }, [liveEquipment, form.equipmentId]);
 
   const asset = useMemo(() => {
-    if (!apiEnabled || !liveEquipment) {
-      return equipmentById(form.equipmentId);
+    if (apiEnabled && liveEquipment && liveEquipment.length > 0) {
+      const live =
+        liveEquipment.find(
+          (e) => e._id === form.equipmentId || e.equipmentId === form.equipmentId,
+        ) ?? liveEquipment[0];
+
+      if (live) {
+        return {
+          id: live.equipmentId || live._id,
+          _id: live._id,
+          name: live.name || "Equipment",
+          category: live.category || "General",
+          manufacturer: live.manufacturer || "Unknown",
+          dept:
+            typeof live.departmentId === "object" && live.departmentId
+              ? (live.departmentId as { name?: string }).name || "Department"
+              : "Radiology",
+          location: live.location || "Main Clinic",
+          status: live.status || "Operational",
+          health: live.healthScore ?? 100,
+        };
+      }
     }
-    const live = liveEquipment.find(
-      (e) => e._id === form.equipmentId || e.equipmentId === form.equipmentId,
-    );
-    if (!live) return null;
+
+    const fallback = equipmentById(form.equipmentId) ?? staffEquipment[0];
+    if (fallback) {
+      return fallback;
+    }
+
     return {
-      id: live.equipmentId,
-      _id: live._id,
-      name: live.name,
-      category: live.category,
-      manufacturer: live.manufacturer || "Unknown",
-      dept:
-        typeof live.departmentId === "object" && live.departmentId
-          ? live.departmentId.name
-          : "Radiology",
-      location: live.location || "Main Clinic",
-      status: live.status,
-      health: live.healthScore ?? 100,
+      id: form.equipmentId || "EQ-1001",
+      _id: form.equipmentId || "EQ-1001",
+      name: "Department Equipment",
+      category: "General",
+      manufacturer: "Medixa",
+      dept: "Department",
+      location: "Main Clinic",
+      status: "Operational",
+      health: 100,
     };
   }, [liveEquipment, form.equipmentId]) as any;
 
@@ -137,15 +160,20 @@ export function RegisterComplaint() {
     }
     setSaving(true);
     setSaveError(null);
-    void create({
-      title: `${form.category} — ${asset.name}`,
-      description: [
-        form.description,
+    const assetName = asset?.name || "Equipment";
+    const desc =
+      [
+        form.description?.trim(),
         form.symptoms.length ? `Symptoms: ${form.symptoms.join(", ")}` : "",
       ]
         .filter(Boolean)
-        .join("\n"),
-      equipment: asset.id,
+        .join("\n") || `Equipment incident reported for ${assetName} (${form.category})`;
+
+    void create({
+      title: `${form.category} — ${assetName}`,
+      description: desc,
+      equipment: asset?.id || form.equipmentId,
+      equipmentId: asset?._id || asset?.id || form.equipmentId,
       priority: form.priority,
     })
       .then((complaint) => {
@@ -180,7 +208,7 @@ export function RegisterComplaint() {
               <h1 className="text-2xl font-bold">Complaint registered</h1>
               <p className="mt-2 max-w-md text-sm text-muted-foreground">
                 Reference <span className="font-semibold text-foreground">{reference}</span> has
-                been raised against {asset.name}. A biomedical engineer will be assigned shortly and
+                been raised against {asset?.name || "the equipment"}. A biomedical engineer will be assigned shortly and
                 you will be notified of every update.
               </p>
             </div>
@@ -276,10 +304,10 @@ export function RegisterComplaint() {
                   value={form.equipmentId}
                   onChange={(e) => set("equipmentId", e.target.value)}
                 >
-                  {apiEnabled && liveEquipment
+                  {apiEnabled && liveEquipment && liveEquipment.length > 0
                     ? liveEquipment.map((e) => (
                         <option key={e._id} value={e._id}>
-                          {e.equipmentId} — {e.name} · {e.location}
+                          {e.equipmentId} — {e.name} · {e.location || "Main Clinic"}
                         </option>
                       ))
                     : staffEquipment.map((e) => (
@@ -319,9 +347,9 @@ export function RegisterComplaint() {
                     <Cpu className="size-5" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-[13.5px] font-semibold">{asset.name}</p>
+                    <p className="truncate text-[13.5px] font-semibold">{asset?.name || "Select equipment"}</p>
                     <p className="text-[11.5px] text-muted-foreground">
-                      {asset.id} · {asset.location} · health {asset.health}%
+                      {asset?.id || form.equipmentId} · {asset?.location || "Main Clinic"} · health {asset?.health ?? 100}%
                     </p>
                   </div>
                 </div>
@@ -476,8 +504,8 @@ export function RegisterComplaint() {
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
               <div>
                 <dl>
-                  <DefRow label="Equipment" value={`${asset.id} — ${asset.name}`} />
-                  <DefRow label="Location" value={asset.location} />
+                  <DefRow label="Equipment" value={asset ? `${asset.id} — ${asset.name}` : form.equipmentId} />
+                  <DefRow label="Location" value={asset?.location || "Main Clinic"} />
                   <DefRow label="Category" value={form.category} />
                   <DefRow
                     label="Priority"
@@ -542,7 +570,12 @@ export function RegisterComplaint() {
               Continue
             </ActionButton>
           ) : (
-            <ActionButton variant="primary" icon={<Send className="size-4" />} onClick={submit}>
+            <ActionButton
+              variant="primary"
+              icon={<Send className="size-4" />}
+              onClick={submit}
+              disabled={saving}
+            >
               {saving ? "Submitting…" : "Submit complaint"}
             </ActionButton>
           )}

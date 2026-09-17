@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Complaint, { COMPLAINT_STATUSES, COMPLAINT_TRANSITIONS, PRIORITIES } from "../models/Complaint.js";
 import Equipment from "../models/Equipment.js";
 import User from "../models/User.js";
@@ -8,7 +9,7 @@ import { ApiError, asyncHandler, created, ok } from "../services/apiError.js";
 import { assertDate, assertEnum, findByAnyId, paginate, requireFields } from "../services/validate.js";
 import { logAudit } from "../services/auditService.js";
 import { nextCode, setComplaintStatus, setEquipmentStatus } from "../services/lifecycleService.js";
-import { loadEquipment } from "./equipmentController.js";
+import { loadEquipment, resolveDepartmentId } from "./equipmentController.js";
 import { recalculateEquipmentEhs } from "../services/ehsService.js";
 
 const load = async (id) => {
@@ -92,28 +93,38 @@ export const getComplaint = asyncHandler(async (req, res) => {
 });
 
 export const createComplaint = asyncHandler(async (req, res) => {
-  requireFields(req.body, ["equipmentId", "title", "description"]);
-  assertEnum(req.body.priority, PRIORITIES, "priority");
-  const equipment = await loadEquipment(req.body.equipmentId);
-
-  if (req.user.role === "DEPARTMENT_STAFF") {
-    const equipDeptId = equipment.departmentId?._id || equipment.departmentId;
-    if (equipDeptId && !sameId(equipDeptId, req.user.departmentId)) {
-      throw new ApiError(403, "Department staff can only raise complaints for equipment in their own department");
-    }
+  requireFields(req.body, ["equipmentId", "title"]);
+  if (!req.body.description || !String(req.body.description).trim()) {
+    req.body.description = req.body.title || "Equipment issue reported by hospital staff";
   }
 
-  const departmentId = equipment.departmentId || req.body.departmentId || req.user.departmentId;
+  const rawPriority = String(req.body.priority || "MEDIUM").toUpperCase();
+  req.body.priority = PRIORITIES.includes(rawPriority) ? rawPriority : "MEDIUM";
 
-  const engineerId = req.body.engineerId || req.body.assignedEngineerId;
+  const equipment = await loadEquipment(req.body.equipmentId);
+
+  let departmentId = equipment.departmentId?._id || equipment.departmentId;
+  if (!departmentId && req.body.departmentId) {
+    departmentId = await resolveDepartmentId(req.body.departmentId);
+  }
+  if (!departmentId && req.user.departmentId) {
+    departmentId = req.user.departmentId;
+  }
+
+  const rawEng = req.body.engineerId || req.body.assignedEngineerId;
   let engineer = null;
-  if (engineerId) {
-    engineer = await User.findById(engineerId);
+  if (rawEng && rawEng !== "Unassigned" && rawEng !== "none" && rawEng !== "unassigned") {
+    if (mongoose.Types.ObjectId.isValid(rawEng)) {
+      engineer = await User.findById(rawEng);
+    }
+    if (!engineer) {
+      engineer = await User.findOne({ name: new RegExp(`^${rawEng}$`, "i"), role: "BIOMEDICAL_ENGINEER" });
+    }
     if (!engineer || engineer.role !== "BIOMEDICAL_ENGINEER") {
       throw new ApiError(400, "Assignee must be a biomedical engineer");
     }
   } else {
-    // Automatically route to the single Biomedical Engineer in the hospital system
+    // Automatically route to the active Biomedical Engineer
     engineer = await User.findOne({ role: "BIOMEDICAL_ENGINEER", status: "ACTIVE" });
   }
 
@@ -125,8 +136,8 @@ export const createComplaint = asyncHandler(async (req, res) => {
     assignedEngineerId: engineer ? engineer._id : undefined,
     title: req.body.title,
     description: req.body.description,
-    priority: req.body.priority || "MEDIUM",
-    status: req.body.status || (engineerId ? "ASSIGNED" : "OPEN"),
+    priority: req.body.priority,
+    status: req.body.status || (engineer ? "ASSIGNED" : "OPEN"),
   });
 
   if (engineer) {

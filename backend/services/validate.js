@@ -51,6 +51,17 @@ export async function findByAnyId(Model, id, codeField) {
   }
   if (!doc && codeField) {
     doc = await Model.findOne({ [codeField]: id });
+    if (!doc) {
+      doc = await Model.findOne({ [codeField]: new RegExp(`^${id}$`, "i") });
+    }
+  }
+  if (!doc) {
+    doc = await Model.findOne({
+      $or: [
+        { code: new RegExp(`^${id}$`, "i") },
+        { name: new RegExp(`^${id}`, "i") },
+      ],
+    });
   }
   return doc;
 }

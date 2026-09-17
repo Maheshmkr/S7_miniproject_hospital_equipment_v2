@@ -21,6 +21,8 @@ export type SessionUser = {
   role: Role;
   title: string;
   home: string;
+  departmentName?: string;
+  departmentId?: string;
 };
 
 export const demoUsers: SessionUser[] = [
@@ -43,13 +45,34 @@ export const demoUsers: SessionUser[] = [
     home: "/engineer",
   },
   {
+    email: "sarah.connor@medixa.health",
+    password: "Medixa#2026",
+    name: "Sarah Connor",
+    initials: "SC",
+    role: "staff",
+    title: "Cardiology Clinical Coordinator",
+    home: "/staff",
+    departmentName: "Cardiology Department",
+  },
+  {
     email: "clara.whitfield@medixa.health",
     password: "Medixa#2026",
     name: "Clara Whitfield",
     initials: "CW",
     role: "staff",
-    title: "Radiology Department Coordinator",
+    title: "ICU Head Nurse",
     home: "/staff",
+    departmentName: "Intensive Care Unit",
+  },
+  {
+    email: "james.chen@medixa.health",
+    password: "Medixa#2026",
+    name: "James Chen",
+    initials: "JC",
+    role: "staff",
+    title: "Radiology Tech Supervisor",
+    home: "/staff",
+    departmentName: "Radiology & Imaging",
   },
 ];
 
@@ -72,6 +95,15 @@ const homeForRole: Record<Role, string> = {
 
 function toSessionUser(apiUser: ApiUser): SessionUser {
   const role = roleFromApi[apiUser.role] ?? "staff";
+  const deptObj =
+    typeof apiUser.departmentId === "object" && apiUser.departmentId ? apiUser.departmentId : null;
+  const departmentName = deptObj ? deptObj.name : undefined;
+  const departmentId = deptObj
+    ? deptObj._id
+    : typeof apiUser.departmentId === "string"
+      ? apiUser.departmentId
+      : undefined;
+
   return {
     email: apiUser.email,
     password: "",
@@ -87,6 +119,8 @@ function toSessionUser(apiUser: ApiUser): SessionUser {
     role,
     title: apiUser.title ?? "",
     home: homeForRole[role],
+    departmentName,
+    departmentId,
   };
 }
 

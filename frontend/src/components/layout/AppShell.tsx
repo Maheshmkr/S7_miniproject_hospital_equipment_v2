@@ -396,7 +396,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
         ))}
       </nav>
 
-      <div className="space-y-2 border-t border-sidebar-border p-3">
+      {/* <div className="space-y-2 border-t border-sidebar-border p-3">
         {!collapsed && (
           <div className="rounded-2xl gradient-primary p-4 text-white shadow-glow">
             <Sparkles className="size-4" />
@@ -424,7 +424,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             {!collapsed && i.label}
           </button>
         ))}
-      </div>
+      </div> */}
     </aside>
   );
 }

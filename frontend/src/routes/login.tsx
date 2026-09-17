@@ -176,8 +176,13 @@ function LoginPage() {
                     {u.initials}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-[12.5px] font-semibold text-foreground">
+                    <span className="flex items-center gap-1.5 truncate text-[12.5px] font-semibold text-foreground">
                       {u.name}
+                      {u.departmentName && (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          {u.departmentName.replace(" Department", "")}
+                        </span>
+                      )}
                     </span>
                     <span className="block truncate text-[11px] text-muted-foreground">
                       {u.title}

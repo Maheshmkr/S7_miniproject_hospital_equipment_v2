@@ -144,7 +144,7 @@ export function toComplaintPayload(
     values["departmentId"] ||
     values["dept"] ||
     values["department"];
-  const engineerId =
+  let engineerId =
     lookups.engineersByName[values["assignee"] ?? ""] ||
     lookups.engineersByName[values["engineer"] ?? ""] ||
     lookups.engineersByName[values["engineerId"] ?? ""] ||
@@ -153,6 +153,16 @@ export function toComplaintPayload(
     values["assignedEngineerId"] ||
     values["assignee"] ||
     values["engineer"];
+
+  if (
+    engineerId === "Unassigned" ||
+    engineerId === "unassigned" ||
+    engineerId === "none" ||
+    engineerId === "None"
+  ) {
+    engineerId = undefined;
+  }
+
   return {
     title: values["title"] ?? "",
     description: values["description"] ?? "",
