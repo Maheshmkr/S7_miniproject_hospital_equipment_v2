@@ -19,6 +19,7 @@ import {
   Download,
   Filter,
   LayoutGrid,
+  Loader2,
   Plus,
   Search,
   ShieldCheck,
@@ -37,6 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { WorkflowStrip } from "@/components/workflow/pages";
 import { useEquipmentList } from "@/lib/api/useEquipment";
+import { usePdfExport, generateReportFilename } from "@/lib/exportPdf";
 import { departmentName } from "@/lib/api/equipmentRecords";
 
 export const Route = createFileRoute("/equipment/")({
@@ -175,6 +177,23 @@ function EquipmentWorkspace() {
     }));
   }, [live.enabled, live.items]);
 
+  const { exporting, handleExport } = usePdfExport();
+
+  const onExport = () => {
+    const filename = generateReportFilename("Equipment-Workspace");
+    void handleExport({
+      filename,
+      title: "Equipment Workspace",
+      subtitle: `${equipmentRows.length} registered assets, monitored in real time with predictive health scoring.`,
+      metadata: {
+        "Total Assets": String(equipmentRows.length),
+        Operational: String(stats[0]?.v ?? "—"),
+        Maintenance: String(stats[1]?.v ?? "—"),
+        Critical: String(stats[2]?.v ?? "—"),
+      },
+    });
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <section className="relative overflow-hidden rounded-[28px] border border-border bg-surface p-8 shadow-float rise-in lg:p-10">
@@ -191,6 +210,23 @@ function EquipmentWorkspace() {
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
+            <button
+              disabled={exporting}
+              onClick={onExport}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] font-semibold shadow-xs transition-all",
+                exporting
+                  ? "opacity-60 cursor-not-allowed pointer-events-none"
+                  : "hover:-translate-y-0.5 hover:shadow-soft",
+              )}
+            >
+              {exporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              {exporting ? "Exporting..." : "Export PDF"}
+            </button>
             <Link
               to="/equipment/list"
               className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] font-semibold shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-soft"

@@ -133,7 +133,14 @@ const equipmentRecords: ModuleRecord[] = (equipment || []).map((e) => ({
           : "neutral",
   score: e.health,
   scoreLabel: "Health",
-  cells: [e.id, e.name, e.category, e.dept, statusTone?.[e.status]?.label ?? "Operational", `${e.health}%`],
+  cells: [
+    e.id,
+    e.name,
+    e.category,
+    e.dept,
+    statusTone?.[e.status]?.label ?? "Operational",
+    `${e.health}%`,
+  ],
   meta: [
     { label: "Category", value: e.category },
     { label: "Department", value: e.dept },
@@ -703,7 +710,12 @@ export const modules = {
     records: departmentRecords,
     fields: [
       { name: "name", label: "Department name", type: "text", placeholder: "Radiology" },
-      { name: "head", label: "Department head", type: "select", options: (users || []).map((u) => u.name) },
+      {
+        name: "head",
+        label: "Department head",
+        type: "select",
+        options: (users || []).map((u) => u.name),
+      },
       {
         name: "wing",
         label: "Building wing",

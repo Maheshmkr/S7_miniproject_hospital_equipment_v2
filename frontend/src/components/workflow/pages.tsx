@@ -27,6 +27,7 @@ import {
   History,
   LayoutGrid,
   ListFilter,
+  Loader2,
   PencilLine,
   Plus,
   Save,
@@ -54,6 +55,7 @@ import { usePurchaseOrderList } from "@/lib/api/usePurchaseOrders";
 import { useVendorList } from "@/lib/api/useVendors";
 import { useDepartmentList } from "@/lib/api/useDepartments";
 import { useUserList } from "@/lib/api/useUsers";
+import { usePdfExport, generateReportFilename } from "@/lib/exportPdf";
 import { cn } from "@/lib/utils";
 import {
   findRecord,
@@ -81,6 +83,8 @@ export function ActionButton({
   variant = "primary",
   onClick,
   type = "button",
+  disabled = false,
+  className,
 }: {
   to?: string;
   params?: Record<string, string>;
@@ -89,25 +93,29 @@ export function ActionButton({
   variant?: "primary" | "ghost";
   onClick?: () => void;
   type?: "button" | "submit";
+  disabled?: boolean;
+  className?: string;
 }) {
   const cls = cn(
-    "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-all duration-200 hover:-translate-y-0.5",
+    "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-all duration-200",
+    disabled ? "opacity-60 cursor-not-allowed pointer-events-none" : "hover:-translate-y-0.5",
     variant === "primary"
       ? "gradient-primary text-white shadow-glow"
       : "border border-border bg-surface text-foreground shadow-xs hover:shadow-soft",
+    className,
   );
-  if (to) {
+  if (to && !disabled) {
     return (
       <Link to={to as never} params={params as never} className={cls}>
-        {Icon ? <Icon className="size-4" /> : null}
+        {Icon ? <Icon className={cn("size-4", disabled && "animate-spin")} /> : null}
         {children}
       </Link>
     );
   }
 
   return (
-    <button type={type} onClick={onClick} className={cls}>
-      {Icon ? <Icon className="size-4" /> : null}
+    <button type={type} onClick={onClick} disabled={disabled} className={cls}>
+      {Icon ? <Icon className={cn("size-4", disabled && "animate-spin")} /> : null}
       {children}
     </button>
   );
@@ -221,6 +229,7 @@ export function ModuleList({
   const m = getModule(moduleKey);
   const [query, setQuery] = useState("");
   const [tone, setTone] = useState<string>("All");
+  const { exporting, handleExport } = usePdfExport();
 
   const source = records ?? m.records;
   const statuses = useMemo(() => ["All", ...new Set(source.map((r) => r.status))], [source]);
@@ -230,6 +239,21 @@ export function ModuleList({
       (r.title + r.id + r.subtitle).toLowerCase().includes(query.toLowerCase()),
   );
 
+  const onExport = () => {
+    const filename = generateReportFilename(`${m.label}-Register`);
+    void handleExport({
+      filename,
+      title: `${m.label} Register`,
+      subtitle: `${rows.length} records · ${m.listDescription}`,
+      metadata: {
+        Module: m.label,
+        "Status Filter": tone,
+        "Search Query": query || "None",
+        "Total Records": String(rows.length),
+      },
+    });
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <PageHeader
@@ -238,8 +262,13 @@ export function ModuleList({
         description={m.listDescription}
         actions={
           <>
-            <ActionButton variant="ghost" icon={Download}>
-              Export
+            <ActionButton
+              variant="ghost"
+              icon={exporting ? Loader2 : Download}
+              disabled={exporting}
+              onClick={onExport}
+            >
+              {exporting ? "Exporting..." : "Export"}
             </ActionButton>
             <ActionButton to={`${m.base}/new` as never} icon={Plus}>
               New {m.singular.toLowerCase()}
@@ -738,6 +767,7 @@ export function ModuleDetails({
   loading?: boolean;
   error?: string | null;
 }) {
+  const { exporting, handleExport } = usePdfExport();
   const m = getModule(moduleKey);
   const record = liveRecord === undefined ? findRecord(moduleKey, id) : liveRecord;
   if (!record) {
@@ -778,6 +808,26 @@ export function ModuleDetails({
             <h1 className="mt-3 text-[30px] font-bold leading-tight">{record.title}</h1>
             <p className="mt-2 max-w-xl text-sm text-muted-foreground">{record.subtitle}</p>
             <div className="mt-6 flex flex-wrap items-center gap-2">
+              <ActionButton
+                variant="ghost"
+                icon={exporting ? Loader2 : Download}
+                disabled={exporting}
+                onClick={() => {
+                  const filename = generateReportFilename(`${m.label}-Detail`, record.id);
+                  void handleExport({
+                    filename,
+                    title: `${m.label} Record: ${record.title}`,
+                    subtitle: record.subtitle,
+                    metadata: {
+                      "Record ID": record.id,
+                      Module: m.label,
+                      Status: record.status,
+                    },
+                  });
+                }}
+              >
+                {exporting ? "Exporting..." : "Export PDF"}
+              </ActionButton>
               <ActionButton to={`${m.base}/${record.id}/edit` as never} icon={PencilLine}>
                 Edit {m.singular.toLowerCase()}
               </ActionButton>
@@ -1001,6 +1051,22 @@ export function ModuleHistory({ moduleKey, id }: { moduleKey: ModuleKey; id: str
     },
   ];
 
+  const { exporting, handleExport } = usePdfExport();
+
+  const onExport = () => {
+    const filename = generateReportFilename(`${m.label}-History`, record.id);
+    void handleExport({
+      filename,
+      title: `${record.title} — Audit History`,
+      subtitle: `Audit trail for ${record.id} (${m.label})`,
+      metadata: {
+        "Record ID": record.id,
+        Module: m.label,
+        "Events Logged": String(audit.length),
+      },
+    });
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <Breadcrumbs
@@ -1017,8 +1083,13 @@ export function ModuleHistory({ moduleKey, id }: { moduleKey: ModuleKey; id: str
         description="Immutable audit trail of every change, review and attachment for this record."
         actions={
           <>
-            <ActionButton variant="ghost" icon={Download}>
-              Export log
+            <ActionButton
+              variant="ghost"
+              icon={exporting ? Loader2 : Download}
+              disabled={exporting}
+              onClick={onExport}
+            >
+              {exporting ? "Exporting..." : "Export log"}
             </ActionButton>
             <ActionButton to={`${m.base}/${record.id}` as never} icon={ArrowLeft}>
               Back to details
@@ -1157,6 +1228,21 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
   const activeStats = apiEnabled && mappedData?.stats ? mappedData.stats : m.stats;
   const activeBreakdown = apiEnabled && mappedData?.breakdown ? mappedData.breakdown : m.breakdown;
 
+  const { exporting, handleExport } = usePdfExport();
+
+  const onExport = () => {
+    const filename = generateReportFilename(`${m.label}-Analytics`);
+    void handleExport({
+      filename,
+      title: `${m.label} Analytics Report`,
+      subtitle: `Performance, distribution and trend intelligence for ${m.label.toLowerCase()}`,
+      metadata: {
+        Module: m.label,
+        "Report Type": "Analytics & Distribution",
+      },
+    });
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <PageHeader
@@ -1165,8 +1251,13 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
         description={`Performance, distribution and trend intelligence for ${m.label.toLowerCase()}.`}
         actions={
           <>
-            <ActionButton variant="ghost" icon={Download}>
-              Export report
+            <ActionButton
+              variant="ghost"
+              icon={exporting ? Loader2 : Download}
+              disabled={exporting}
+              onClick={onExport}
+            >
+              {exporting ? "Exporting..." : "Export report"}
             </ActionButton>
             <ActionButton to={`${m.base}/list` as never} icon={ListFilter}>
               Open register

@@ -20,11 +20,13 @@ import {
   ArrowUpRight,
   Download,
   Gauge,
+  Loader2,
   PieChart as PieIcon,
   Sparkles,
   TrendingUp,
 } from "lucide-react";
 import { Panel, PanelHead, Pill } from "@/components/ui/primitives";
+import { usePdfExport, generateReportFilename } from "@/lib/exportPdf";
 import {
   categories as mockCategories,
   complaintFlow as mockComplaintFlow,
@@ -107,6 +109,28 @@ function Analytics() {
     },
   ];
 
+  const { exporting, handleExport } = usePdfExport();
+
+  const onExportPdf = (reportTitle = "Executive Analytics") => {
+    const filename = generateReportFilename(reportTitle);
+    const totalAssets =
+      liveData?.stats?.totalEquipment ?? activeCategories.reduce((acc, c) => acc + c.count, 0);
+    const avgHealth = liveData?.equipmentHealth?.averageScore ?? 88;
+
+    void handleExport({
+      filename,
+      title: reportTitle,
+      subtitle:
+        "Board-level view of asset performance, service economics and clinical availability",
+      metadata: {
+        "Report Type": "Executive Analytics",
+        "Active Assets": String(totalAssets),
+        "Compliance Index": liveData ? `${liveData.compliance?.ppmCompliance || 96.2}%` : "96.2%",
+        "Mean Health": `${avgHealth}%`,
+      },
+    });
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <section className="relative overflow-hidden rounded-[28px] border border-border bg-surface p-8 shadow-float rise-in">
@@ -123,8 +147,22 @@ function Analytics() {
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
-            <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] font-semibold shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-soft">
-              <Download className="size-4" /> Export PDF
+            <button
+              disabled={exporting}
+              onClick={() => onExportPdf("Executive-Analytics")}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] font-semibold shadow-xs transition-all",
+                exporting
+                  ? "opacity-60 cursor-not-allowed pointer-events-none"
+                  : "hover:-translate-y-0.5 hover:shadow-soft",
+              )}
+            >
+              {exporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              {exporting ? "Exporting..." : "Export PDF"}
             </button>
             <button className="inline-flex items-center gap-2 rounded-xl gradient-primary px-4 py-2.5 text-[13px] font-semibold text-white shadow-glow transition-transform hover:-translate-y-0.5">
               <Sparkles className="size-4" /> Generate summary
@@ -401,12 +439,22 @@ function Analytics() {
             ].map((f) => (
               <button
                 key={f}
+                disabled={exporting}
+                onClick={() => {
+                  const title = f.replace(/\s*\([^)]+\)/, "");
+                  onExportPdf(title);
+                }}
                 className={cn(
                   "group flex w-full items-center justify-between rounded-2xl border border-border px-4 py-3 text-left text-[12.5px] font-semibold transition-all hover:border-primary/40 hover:bg-primary-soft/50",
+                  exporting && "opacity-60 cursor-not-allowed pointer-events-none",
                 )}
               >
                 {f}
-                <Download className="size-4 text-muted-foreground group-hover:text-primary" />
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Download className="size-4 text-muted-foreground group-hover:text-primary" />
+                )}
               </button>
             ))}
           </div>

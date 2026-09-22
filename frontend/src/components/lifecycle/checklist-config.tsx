@@ -261,15 +261,11 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
             ? "yesno"
             : (q.responseType?.toLowerCase() as ChecklistResponseType) || "passfail";
       const prio =
-        q.priority === "CRITICAL"
-          ? "Critical"
-          : q.priority === "IMPORTANT"
-            ? "High"
-            : "Medium";
+        q.priority === "CRITICAL" ? "Critical" : q.priority === "IMPORTANT" ? "High" : "Medium";
       return {
         id: q._id || q.id,
         templateId: typeof q.templateId === "object" ? q.templateId?._id : q.templateId,
-        equipmentId: q.scope === "equipment" ? (equipmentId || asset?.id) : undefined,
+        equipmentId: q.scope === "equipment" ? equipmentId || asset?.id : undefined,
         category: asset?.category || "",
         text: q.question || q.text || "",
         responseType: respType,
@@ -296,7 +292,9 @@ export function ChecklistConfigPage({ equipmentId }: { equipmentId: string }) {
     : localEqQuestions;
 
   const resolved = useLive
-    ? questionsFromApi.filter((q) => q.active).sort((a, b) => (a.equipmentId ? 1 : 0) - (b.equipmentId ? 1 : 0) || a.order - b.order)
+    ? questionsFromApi
+        .filter((q) => q.active)
+        .sort((a, b) => (a.equipmentId ? 1 : 0) - (b.equipmentId ? 1 : 0) || a.order - b.order)
     : localResolved;
 
   if (!asset) {

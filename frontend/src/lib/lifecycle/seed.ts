@@ -39,8 +39,16 @@ const getDerivedEquipment = (): LifecycleEquipment[] =>
     preventiveOverdue: (e.specs?.nextService || "").toLowerCase().includes("overdue"),
     documents: [
       { name: `${e.id}-user-manual.pdf`, kind: "Manual", when: e.specs?.installed || "" },
-      { name: `${e.id}-installation-certificate.pdf`, kind: "Certificate", when: e.specs?.installed || "" },
-      { name: `${e.id}-last-calibration.pdf`, kind: "Calibration", when: e.specs?.lastService || "" },
+      {
+        name: `${e.id}-installation-certificate.pdf`,
+        kind: "Certificate",
+        when: e.specs?.installed || "",
+      },
+      {
+        name: `${e.id}-last-calibration.pdf`,
+        kind: "Calibration",
+        when: e.specs?.lastService || "",
+      },
     ],
   }));
 

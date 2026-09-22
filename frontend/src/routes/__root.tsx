@@ -194,13 +194,17 @@ function AuthGate() {
     if (!ready) return;
     if (!user && !isLogin) void navigate({ to: "/login", replace: true });
     else if (user && isLogin) void navigate({ to: user.home as never, replace: true });
-    else if (user?.role === "staff" && (pathname === "/complaints/new" || pathname === "/complaints")) {
+    else if (
+      user?.role === "staff" &&
+      (pathname === "/complaints/new" || pathname === "/complaints")
+    ) {
       void navigate({
-        to: (pathname === "/complaints/new" ? "/staff/complaints/new" : "/staff/complaints") as never,
+        to: (pathname === "/complaints/new"
+          ? "/staff/complaints/new"
+          : "/staff/complaints") as never,
         replace: true,
       });
-    }
-    else if (outOfScope) void navigate({ to: scoped as never, replace: true });
+    } else if (outOfScope) void navigate({ to: scoped as never, replace: true });
   }, [ready, user, isLogin, outOfScope, scoped, navigate, pathname]);
 
   if (!ready) return <div className="min-h-screen bg-background" />;

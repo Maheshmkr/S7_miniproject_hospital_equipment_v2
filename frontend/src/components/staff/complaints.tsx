@@ -208,8 +208,8 @@ export function RegisterComplaint() {
               <h1 className="text-2xl font-bold">Complaint registered</h1>
               <p className="mt-2 max-w-md text-sm text-muted-foreground">
                 Reference <span className="font-semibold text-foreground">{reference}</span> has
-                been raised against {asset?.name || "the equipment"}. A biomedical engineer will be assigned shortly and
-                you will be notified of every update.
+                been raised against {asset?.name || "the equipment"}. A biomedical engineer will be
+                assigned shortly and you will be notified of every update.
               </p>
             </div>
             <div className="grid w-full max-w-lg gap-3 sm:grid-cols-3">
@@ -347,9 +347,12 @@ export function RegisterComplaint() {
                     <Cpu className="size-5" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-[13.5px] font-semibold">{asset?.name || "Select equipment"}</p>
+                    <p className="truncate text-[13.5px] font-semibold">
+                      {asset?.name || "Select equipment"}
+                    </p>
                     <p className="text-[11.5px] text-muted-foreground">
-                      {asset?.id || form.equipmentId} · {asset?.location || "Main Clinic"} · health {asset?.health ?? 100}%
+                      {asset?.id || form.equipmentId} · {asset?.location || "Main Clinic"} · health{" "}
+                      {asset?.health ?? 100}%
                     </p>
                   </div>
                 </div>
@@ -504,7 +507,10 @@ export function RegisterComplaint() {
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
               <div>
                 <dl>
-                  <DefRow label="Equipment" value={asset ? `${asset.id} — ${asset.name}` : form.equipmentId} />
+                  <DefRow
+                    label="Equipment"
+                    value={asset ? `${asset.id} — ${asset.name}` : form.equipmentId}
+                  />
                   <DefRow label="Location" value={asset?.location || "Main Clinic"} />
                   <DefRow label="Category" value={form.category} />
                   <DefRow
@@ -673,8 +679,7 @@ export function ComplaintHistory() {
         const eq = equipmentById(c.equipmentId);
         const eqTitle = c.equipmentName || eq?.name || "Hamilton C6 ICU Ventilator";
         const matchQ =
-          !q ||
-          [c.id, c.title, eqTitle, c.engineer].some((v) => v.toLowerCase().includes(q));
+          !q || [c.id, c.title, eqTitle, c.engineer].some((v) => v.toLowerCase().includes(q));
         return (
           matchQ &&
           (status === "All" || c.status === status) &&
@@ -852,7 +857,10 @@ export function ComplaintHistory() {
                       <p className="truncate text-[11.5px] text-muted-foreground">{c.title}</p>
                     </td>
                     <td className="px-4 py-3.5 text-[12.5px] text-muted-foreground">
-                      {(c as any).equipmentName || equipmentById(c.equipmentId)?.name || c.equipmentId || "Hamilton C6 ICU Ventilator"}
+                      {(c as any).equipmentName ||
+                        equipmentById(c.equipmentId)?.name ||
+                        c.equipmentId ||
+                        "Hamilton C6 ICU Ventilator"}
                     </td>
                     <td className="px-4 py-3.5">
                       <Pill tone={priorityTone[c.priority]}>{c.priority}</Pill>
@@ -953,7 +961,11 @@ export function ComplaintDetails({ id }: { id: string }) {
     if (!complaint) return null;
     const found = equipmentById(complaint.equipmentId);
     if (found) return found;
-    if (liveComplaint && typeof liveComplaint.equipmentId === "object" && liveComplaint.equipmentId) {
+    if (
+      liveComplaint &&
+      typeof liveComplaint.equipmentId === "object" &&
+      liveComplaint.equipmentId
+    ) {
       const eq = liveComplaint.equipmentId as any;
       return {
         id: eq.equipmentId || complaint.equipmentId || "EQ-1001",
