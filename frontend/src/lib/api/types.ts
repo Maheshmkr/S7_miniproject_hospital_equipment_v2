@@ -1,6 +1,6 @@
 /** Shared API DTOs — mirror the Mongoose models one-to-one. */
 
-export type ApiRole = "ADMINISTRATOR" | "BIOMEDICAL_ENGINEER" | "DEPARTMENT_STAFF";
+export type ApiRole = "ADMINISTRATOR" | "BIOMEDICAL_ENGINEER" | "TECHNICIAN" | "DEPARTMENT_STAFF";
 
 export type ApiUser = {
   _id: string;

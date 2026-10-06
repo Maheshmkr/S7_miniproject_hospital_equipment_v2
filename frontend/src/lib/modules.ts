@@ -25,10 +25,12 @@ export type Tone = "neutral" | "primary" | "success" | "warning" | "danger" | "v
 export type FieldDef = {
   name: string;
   label: string;
-  type: "text" | "textarea" | "select" | "number" | "date";
+  type: "text" | "textarea" | "select" | "number" | "date" | "password" | "email";
   options?: string[];
   placeholder?: string;
   wide?: boolean;
+  required?: boolean;
+  helperText?: string;
 };
 
 export type MetaItem = { label: string; value: string };
@@ -756,12 +758,20 @@ export const modules = {
     columns: ["Name", "Handle", "Role", "Department", "Status", "Last active"],
     records: userRecords,
     fields: [
-      { name: "name", label: "Full name", type: "text", placeholder: "Emilia Greene" },
+      { name: "name", label: "Full name", type: "text", placeholder: "Emilia Greene", required: true },
       {
         name: "email",
         label: "Work email",
-        type: "text",
+        type: "email",
         placeholder: "emilia.greene@medixa.health",
+        required: true,
+      },
+      {
+        name: "password",
+        label: "Create Password",
+        type: "password",
+        placeholder: "Min. 6 characters (e.g. Medixa#2026)",
+        helperText: "Initial login password (min 6 characters). If left blank, defaults to Medixa#2026.",
       },
       {
         name: "role",
@@ -775,12 +785,14 @@ export const modules = {
           "Auditor",
           "Procurement",
         ],
+        required: true,
       },
       {
         name: "dept",
         label: "Department",
         type: "select",
         options: (departments || []).map((d) => d.name),
+        required: true,
       },
       {
         name: "shift",

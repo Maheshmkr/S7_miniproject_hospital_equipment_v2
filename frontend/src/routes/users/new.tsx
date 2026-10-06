@@ -36,8 +36,11 @@ function UsersCreateRoute() {
       onSave={async (values) => {
         const payload = toUserPayload(values);
         // Ensure default password if not provided in form
-        if (!payload.password) {
+        if (!payload.password || payload.password.trim().length === 0) {
           payload.password = "Medixa#2026";
+        }
+        if (payload.password.length < 6) {
+          throw new Error("Password must be at least 6 characters long.");
         }
         const saved = await create(payload as Parameters<typeof create>[0]);
         void navigate({ to: "/users/$id", params: { id: saved._id } });

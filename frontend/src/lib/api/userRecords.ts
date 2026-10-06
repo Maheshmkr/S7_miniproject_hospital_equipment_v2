@@ -4,6 +4,7 @@ import type { ApiRole, ApiUser } from "./types";
 export const USER_ROLE_LABELS: Record<ApiRole, string> = {
   ADMINISTRATOR: "Administrator",
   BIOMEDICAL_ENGINEER: "Engineer",
+  TECHNICIAN: "Technician",
   DEPARTMENT_STAFF: "Specialist",
 };
 
@@ -11,6 +12,7 @@ export const labelToRole = (label?: string): ApiRole => {
   const clean = (label || "").trim().toLowerCase();
   if (clean.includes("admin")) return "ADMINISTRATOR";
   if (clean.includes("lead") || clean.includes("engineer")) return "BIOMEDICAL_ENGINEER";
+  if (clean.includes("tech")) return "TECHNICIAN";
   return "DEPARTMENT_STAFF";
 };
 

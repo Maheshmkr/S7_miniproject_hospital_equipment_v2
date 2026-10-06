@@ -40,6 +40,14 @@ function UsersEditRoute() {
       error={live.error}
       onSave={async (values) => {
         const payload = toUserPayload(values);
+        if (payload.password && payload.password.trim().length > 0) {
+          if (payload.password.trim().length < 6) {
+            throw new Error("Password must be at least 6 characters long.");
+          }
+          payload.password = payload.password.trim();
+        } else {
+          delete payload.password;
+        }
         const saved = await update(id, payload);
         void navigate({ to: "/users/$id", params: { id: saved._id } });
         return { id: saved._id };

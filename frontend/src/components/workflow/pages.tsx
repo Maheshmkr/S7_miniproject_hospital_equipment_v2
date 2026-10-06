@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Area,
@@ -23,6 +23,8 @@ import {
   CheckCircle2,
   ClipboardList,
   Download,
+  Eye,
+  EyeOff,
   Filter,
   History,
   LayoutGrid,
@@ -421,19 +423,56 @@ function Field({
   f,
   defaultValue,
   dynamicOptions,
+  mode = "create",
 }: {
   f: FieldDef;
   defaultValue?: string | undefined;
   dynamicOptions?: string[] | undefined;
+  mode?: "create" | "edit";
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [val, setVal] = useState(defaultValue ?? "");
+  const isPassword = f.type === "password" || f.name.toLowerCase() === "password";
+
+  useEffect(() => {
+    if (defaultValue !== undefined) {
+      setVal(defaultValue);
+    }
+  }, [defaultValue]);
+
+  const generatePassword = () => {
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$";
+    let pwd = "Medixa#";
+    for (let i = 0; i < 4; i++) {
+      pwd += chars[Math.floor(Math.random() * chars.length)];
+    }
+    setVal(pwd);
+    setShowPassword(true);
+  };
+
   const base =
     "mt-2 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[13px] text-foreground shadow-xs outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:shadow-soft";
   const options = dynamicOptions && dynamicOptions.length > 0 ? dynamicOptions : (f.options ?? []);
   return (
     <div className={cn(f.wide && "sm:col-span-2")}>
-      <label className="text-[12px] font-semibold text-foreground" htmlFor={f.name}>
-        {f.label}
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="text-[12px] font-semibold text-foreground" htmlFor={f.name}>
+          {isPassword && mode === "edit" ? "New password (optional)" : f.label}
+          {f.required && mode === "create" && !isPassword ? (
+            <span className="ml-1 text-danger">*</span>
+          ) : null}
+        </label>
+        {isPassword && mode === "create" ? (
+          <button
+            type="button"
+            onClick={generatePassword}
+            className="text-[11px] font-semibold text-primary transition-colors hover:underline"
+          >
+            Generate random
+          </button>
+        ) : null}
+      </div>
+
       {f.type === "textarea" ? (
         <textarea
           id={f.name}
@@ -451,16 +490,60 @@ function Field({
             </option>
           ))}
         </select>
+      ) : isPassword ? (
+        <div className="relative mt-2">
+          <input
+            id={f.name}
+            name={f.name}
+            type={showPassword ? "text" : "password"}
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            placeholder={
+              mode === "edit"
+                ? "Leave blank to keep unchanged"
+                : (f.placeholder || "Min 6 characters (e.g. Medixa#2026)")
+            }
+            className={cn(base, "mt-0 pr-10")}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+            title={showPassword ? "Hide password" : "Show password"}
+          >
+            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </button>
+        </div>
       ) : (
         <input
           id={f.name}
           name={f.name}
-          type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+          type={
+            f.type === "number"
+              ? "number"
+              : f.type === "date"
+                ? "date"
+                : f.type === "email"
+                  ? "email"
+                  : "text"
+          }
           placeholder={f.placeholder}
           defaultValue={defaultValue}
           className={base}
         />
       )}
+
+      {f.helperText ? (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          {isPassword && mode === "edit"
+            ? "Leave blank to keep existing password, or enter at least 6 characters to reset."
+            : f.helperText}
+        </p>
+      ) : isPassword && mode === "edit" ? (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Leave blank to keep existing password, or enter at least 6 characters to reset.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -534,6 +617,13 @@ function RecordForm({
       Array.from(new FormData(form).entries()).map(([k, v]) => [k, String(v)]),
     ) as Record<string, string>;
 
+    if (moduleKey === "users" && values["password"] && values["password"].trim().length > 0) {
+      if (values["password"].trim().length < 6) {
+        setError("Password must be at least 6 characters long.");
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
     void onSave(values)
@@ -571,6 +661,7 @@ function RecordForm({
             <Field
               key={f.name}
               f={f}
+              mode={mode}
               defaultValue={mode === "edit" ? defaults(f) : undefined}
               dynamicOptions={getDynamicOptions(f.name)}
             />
