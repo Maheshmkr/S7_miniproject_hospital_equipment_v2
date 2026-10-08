@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -295,9 +295,47 @@ function Brand({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function normalizePath(path: string): string {
+  if (path === "/") return "/";
+  return path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function isNavItemActive(itemTo: string, pathname: string, allItemTos: string[]): boolean {
+  const normPath = normalizePath(pathname);
+  const normTo = normalizePath(itemTo);
+
+  // Exact match
+  if (normPath === normTo) {
+    return true;
+  }
+
+  // Root / dashboard paths must match exactly
+  if (normTo === "/" || normTo === "/engineer" || normTo === "/staff") {
+    return false;
+  }
+
+  // Prefix match (must be followed by /)
+  if (!normPath.startsWith(`${normTo}/`)) {
+    return false;
+  }
+
+  // If another nav item is a more specific (longer) match, prefer that one
+  const hasBetterMatch = allItemTos.some((other) => {
+    const normOther = normalizePath(other);
+    return (
+      normOther !== normTo &&
+      normOther.length > normTo.length &&
+      (normPath === normOther || normPath.startsWith(`${normOther}/`))
+    );
+  });
+
+  return !hasBetterMatch;
+}
+
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { sections } = useNav();
+  const allItemTos = useMemo(() => sections.flatMap((s) => s.items.map((i) => i.to)), [sections]);
 
   return (
     <aside
@@ -338,7 +376,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             )}
             <ul className="space-y-1">
               {group.items.map((item) => {
-                const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+                const active = isNavItemActive(item.to, pathname, allItemTos);
                 return (
                   <li key={item.to}>
                     <Link
@@ -377,7 +415,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
                               to={c.to}
                               className={cn(
                                 "block rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors",
-                                pathname === c.to
+                                normalizePath(pathname) === normalizePath(c.to)
                                   ? "bg-sidebar-accent text-foreground"
                                   : "text-muted-foreground hover:text-foreground",
                               )}
@@ -579,8 +617,12 @@ function ProfileMenu() {
 function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { sections } = useNav();
-  const items = sections.flatMap((s) => s.items.map((i) => ({ ...i, section: s.section })));
-  const current = items.find((i) => (i.to === "/" ? pathname === "/" : pathname.startsWith(i.to)));
+  const items = useMemo(
+    () => sections.flatMap((s) => s.items.map((i) => ({ ...i, section: s.section }))),
+    [sections],
+  );
+  const allTos = useMemo(() => items.map((i) => i.to), [items]);
+  const current = items.find((i) => isNavItemActive(i.to, pathname, allTos));
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-xl">

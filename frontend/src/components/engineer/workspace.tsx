@@ -730,7 +730,7 @@ export function TaskDetails({ id }: { id: string }) {
             >
               Equipment
             </ActionButton>
-            <ActionButton to="/engineer/tasks/$id/start" params={{ id: workOrder._id }} icon={Play}>
+            <ActionButton to="/engineer/tasks/$id/checklist" params={{ id: workOrder._id }} icon={Play}>
               Start maintenance
             </ActionButton>
           </>
@@ -886,11 +886,6 @@ export function TaskDetails({ id }: { id: string }) {
             <div className="space-y-2 px-6 pb-6 sm:px-7">
               {[
                 {
-                  label: "Start maintenance",
-                  to: "/engineer/tasks/$id/start" as const,
-                  icon: Play,
-                },
-                {
                   label: "Preventive checklist",
                   to: "/engineer/tasks/$id/checklist" as const,
                   icon: ClipboardList,
@@ -899,11 +894,6 @@ export function TaskDetails({ id }: { id: string }) {
                   label: "Breakdown maintenance",
                   to: "/engineer/tasks/$id/breakdown" as const,
                   icon: CircleAlert,
-                },
-                {
-                  label: "Upload photos & documents",
-                  to: "/engineer/tasks/$id/uploads" as const,
-                  icon: FileText,
                 },
                 {
                   label: "Service report",

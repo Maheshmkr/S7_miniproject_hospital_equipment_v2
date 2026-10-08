@@ -84,10 +84,8 @@ export function SelectInput({
 
 function WorkflowStrip({ id, active }: { id: string; active: string }) {
   const steps = [
-    { key: "start", label: "Start", to: "/engineer/tasks/$id/start" as const },
     { key: "checklist", label: "Checklist", to: "/engineer/tasks/$id/checklist" as const },
     { key: "breakdown", label: "Breakdown", to: "/engineer/tasks/$id/breakdown" as const },
-    { key: "uploads", label: "Evidence", to: "/engineer/tasks/$id/uploads" as const },
     { key: "report", label: "Service report", to: "/engineer/tasks/$id/report" as const },
     { key: "complete", label: "Complete", to: "/engineer/tasks/$id/complete" as const },
   ];
@@ -553,7 +551,7 @@ export function PreventiveChecklistPage({ id }: { id: string }) {
         ]}
       />
       <PageHeader
-        eyebrow="Step 2 · Preventive"
+        eyebrow="Step 1 · Preventive"
         title="Preventive maintenance checklist"
         description={
           "IEC 62353 aligned PPM checklist for " +
@@ -575,11 +573,11 @@ export function PreventiveChecklistPage({ id }: { id: string }) {
               </ActionButton>
             ) : (
               <ActionButton
-                to="/engineer/tasks/$id/uploads"
+                to="/engineer/tasks/$id/report"
                 params={{ id: t._id }}
                 icon={ArrowRight}
               >
-                Attach evidence
+                Proceed to report
               </ActionButton>
             )}
           </>
@@ -842,7 +840,7 @@ export function BreakdownMaintenance({ id }: { id: string }) {
       // Ignore failure and continue navigation
     } finally {
       setSaving(false);
-      navigate({ to: "/engineer/tasks/$id/uploads", params: { id: t._id } });
+      navigate({ to: "/engineer/tasks/$id/report", params: { id: t._id } });
     }
   };
 
@@ -875,7 +873,7 @@ export function BreakdownMaintenance({ id }: { id: string }) {
         ]}
       />
       <PageHeader
-        eyebrow="Step 3 · Corrective"
+        eyebrow="Step 2 · Corrective"
         title="Breakdown maintenance"
         description={
           "Capture the fault, root cause and corrective action taken on " +
@@ -898,7 +896,7 @@ export function BreakdownMaintenance({ id }: { id: string }) {
               ) : (
                 <FileText className="size-4" />
               )}
-              Attach evidence & continue
+              Proceed to report
             </button>
           </>
         }
@@ -1454,13 +1452,13 @@ export function ServiceReport({ id }: { id: string }) {
         ]}
       />
       <PageHeader
-        eyebrow="Step 5 · Documentation"
+        eyebrow="Step 3 · Documentation"
         title="Service report"
         description="The formal record issued to the department, vendor and compliance auditors once the work order closes."
         actions={
           <>
-            <ActionButton variant="ghost" to="/engineer/tasks/$id/uploads" params={{ id: t._id }}>
-              Evidence
+            <ActionButton variant="ghost" to="/engineer/tasks/$id/checklist" params={{ id: t._id }}>
+              Checklist
             </ActionButton>
             <button
               type="button"
@@ -1717,7 +1715,7 @@ export function CompleteMaintenance({ id }: { id: string }) {
         ]}
       />
       <PageHeader
-        eyebrow="Step 6 · Closure"
+        eyebrow="Step 4 · Closure"
         title="Complete maintenance"
         description={
           "Return " +
