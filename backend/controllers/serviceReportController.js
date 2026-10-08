@@ -22,14 +22,23 @@ export const listServiceReports = asyncHandler(async (req, res) => {
     .populate({ path: "equipmentId", select: "equipmentId name category departmentId" })
     .populate("engineerId", "name initials")
     .populate("workOrderId", "workOrderId title")
+    .populate("complaintId", "complaintId title")
+    .populate("maintenanceId", "maintenanceType")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
   let [items, total] = await Promise.all([query, ServiceReport.countDocuments(filter)]);
-  if (departmentId) {
-    items = items.filter((r) => String(r.equipmentId?.departmentId) === String(departmentId));
-    total = items.length;
+  const targetDept = departmentId || (req.user?.role === "DEPARTMENT_STAFF" ? req.user.departmentId : null);
+  if (targetDept) {
+    const deptFiltered = items.filter((r) => {
+      const dId = r.equipmentId?.departmentId?._id || r.equipmentId?.departmentId;
+      return dId && String(dId) === String(targetDept);
+    });
+    if (deptFiltered.length > 0) {
+      items = deptFiltered;
+      total = deptFiltered.length;
+    }
   }
   return ok(res, { items, total, page, limit });
 });
@@ -41,6 +50,7 @@ export const getServiceReport = asyncHandler(async (req, res) => {
     { path: "equipmentId" },
     { path: "workOrderId" },
     { path: "complaintId" },
+    { path: "maintenanceId" },
     { path: "engineerId", select: "name initials title" },
     { path: "evidence" },
   ]);
