@@ -8,7 +8,27 @@ router.use(requireAuth);
 router.get("/", c.listDepartments);
 router.get("/:id", c.getDepartment);
 router.get("/:id/staff", c.departmentStaff);
+router.post(
+  "/:id/staff/map",
+  requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"),
+  c.mapDepartmentStaff,
+);
+router.post(
+  "/:id/staff/unmap",
+  requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"),
+  c.unmapDepartmentStaff,
+);
 router.get("/:id/equipment", c.departmentEquipment);
+router.post(
+  "/:id/equipment/map",
+  requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"),
+  c.mapDepartmentEquipment,
+);
+router.post(
+  "/:id/equipment/unmap",
+  requireRole("ADMINISTRATOR", "BIOMEDICAL_ENGINEER"),
+  c.unmapDepartmentEquipment,
+);
 router.get("/:id/complaints", c.departmentComplaints);
 router.get("/:id/maintenance", c.departmentMaintenance);
 router.post("/", requireRole("ADMINISTRATOR"), c.createDepartment);

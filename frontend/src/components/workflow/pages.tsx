@@ -452,7 +452,13 @@ function Field({
 
   const base =
     "mt-2 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[13px] text-foreground shadow-xs outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:shadow-soft";
-  const options = dynamicOptions && dynamicOptions.length > 0 ? dynamicOptions : (f.options ?? []);
+  const options = useMemo(() => {
+    const list = dynamicOptions && dynamicOptions.length > 0 ? [...dynamicOptions] : [...(f.options ?? [])];
+    if (defaultValue && !list.includes(defaultValue)) {
+      list.unshift(defaultValue);
+    }
+    return list;
+  }, [dynamicOptions, f.options, defaultValue]);
   return (
     <div className={cn(f.wide && "sm:col-span-2")}>
       <div className="flex items-center justify-between">
@@ -552,11 +558,13 @@ function RecordForm({
   moduleKey,
   mode,
   record,
+  defaultValues,
   onSave,
 }: {
   moduleKey: ModuleKey;
   mode: "create" | "edit";
-  record?: ModuleRecord;
+  record?: ModuleRecord | undefined;
+  defaultValues?: Record<string, string> | undefined;
   /** When provided the form persists through the API before redirecting. */
   onSave?: ((values: Record<string, string>) => Promise<{ id?: string } | void>) | undefined;
 }) {
@@ -567,7 +575,7 @@ function RecordForm({
   const [error, setError] = useState<string | null>(null);
 
   const { items: liveEquipment } = useEquipmentList(apiEnabled ? { limit: 200 } : { limit: 0 });
-  const { items: liveDepartments } = useDepartmentList(apiEnabled ? { limit: 100 } : { limit: 0 });
+  const { items: liveDepartments } = useDepartmentList();
   const { items: liveUsers } = useUserList(apiEnabled ? { limit: 100 } : { limit: 0 });
 
   const getDynamicOptions = (fieldName: string) => {
@@ -662,7 +670,14 @@ function RecordForm({
               key={f.name}
               f={f}
               mode={mode}
-              defaultValue={mode === "edit" ? defaults(f) : undefined}
+              defaultValue={
+                mode === "edit"
+                  ? defaults(f)
+                  : (defaultValues?.[f.name] ??
+                    (f.name === "dept"
+                      ? defaultValues?.["department"] ?? defaultValues?.["dept"]
+                      : undefined))
+              }
               dynamicOptions={getDynamicOptions(f.name)}
             />
           ))}
@@ -741,9 +756,11 @@ function RecordForm({
 
 export function ModuleCreate({
   moduleKey,
+  defaultValues,
   onSave,
 }: {
   moduleKey: ModuleKey;
+  defaultValues?: Record<string, string> | undefined;
   onSave?: ((values: Record<string, string>) => Promise<{ id?: string } | void>) | undefined;
 }) {
   const m = getModule(moduleKey);
@@ -767,7 +784,12 @@ export function ModuleCreate({
         }
       />
       <WorkflowTabs moduleKey={moduleKey} active="create" />
-      <RecordForm moduleKey={moduleKey} mode="create" onSave={onSave} />
+      <RecordForm
+        moduleKey={moduleKey}
+        mode="create"
+        {...(defaultValues ? { defaultValues } : {})}
+        onSave={onSave}
+      />
     </div>
   );
 }

@@ -14,8 +14,11 @@ const STATUS_META: Record<ApiEquipmentStatus, { label: string; tone: Tone }> = {
   RETIRED: { label: "Retired", tone: "neutral" },
 };
 
-export const departmentName = (dept: ApiEquipment["departmentId"]): string =>
-  typeof dept === "object" && dept ? (dept as ApiDepartment).name : "Unassigned";
+export const departmentName = (dept: ApiEquipment["departmentId"]): string => {
+  if (typeof dept === "object" && dept) return (dept as ApiDepartment).name || (dept as ApiDepartment).code || "Unassigned";
+  if (typeof dept === "string" && dept.trim()) return dept.trim();
+  return "Unassigned";
+};
 
 export const departmentId = (dept: ApiEquipment["departmentId"]): string =>
   typeof dept === "object" && dept ? (dept as ApiDepartment)._id : (dept ?? "");
@@ -121,7 +124,16 @@ export function toEquipmentPayload(
     description: values["notes"],
   };
   if (values["tag"]?.trim()) payload["equipmentId"] = values["tag"].trim();
-  const deptId = departmentsByName[values["dept"] ?? ""];
-  if (deptId) payload["departmentId"] = deptId;
+  const deptRaw = (values["departmentId"] || values["dept"] || values["department"] || "").trim();
+  if (deptRaw) {
+    const matched =
+      departmentsByName[deptRaw] ||
+      Object.entries(departmentsByName).find(
+        ([k]) => k.toLowerCase() === deptRaw.toLowerCase(),
+      )?.[1];
+    payload["departmentId"] = matched || deptRaw;
+  } else if (values["departmentId"] === null || values["dept"] === "" || values["department"] === "") {
+    payload["departmentId"] = null;
+  }
   return payload as Partial<ApiEquipment>;
 }

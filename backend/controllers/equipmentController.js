@@ -26,14 +26,19 @@ export const loadEquipment = async (id) => {
 /** Resolve departmentId from ObjectId string, department code (e.g. "RAD"), or department name. */
 export const resolveDepartmentId = async (input) => {
   if (!input) return null;
-  if (mongoose.Types.ObjectId.isValid(input)) {
-    const byId = await Department.findById(input);
-    if (byId) return byId._id;
+  if (typeof input === "object" && input !== null) {
+    input = input._id || input.id || input.code || input.name;
+    if (!input) return null;
   }
   const clean = String(input).trim();
-  const byCode = await Department.findOne({ code: clean.toUpperCase() });
+  if (mongoose.Types.ObjectId.isValid(clean)) {
+    const byId = await Department.findById(clean);
+    if (byId) return byId._id;
+  }
+  const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const byCode = await Department.findOne({ code: new RegExp(`^${escaped}$`, "i") });
   if (byCode) return byCode._id;
-  const byName = await Department.findOne({ name: new RegExp(`^${clean}$`, "i") });
+  const byName = await Department.findOne({ name: new RegExp(`^${escaped}$`, "i") });
   if (byName) return byName._id;
   return null;
 };
@@ -41,7 +46,8 @@ export const resolveDepartmentId = async (input) => {
 /** Department staff may only read assets that belong to their own department. */
 const assertDepartmentAccess = (user, eq) => {
   if (user.role !== "DEPARTMENT_STAFF" || !user.departmentId) return;
-  if (String(eq.departmentId || "") !== String(user.departmentId)) {
+  const eqDeptId = String(eq.departmentId?._id || eq.departmentId || "");
+  if (eqDeptId !== String(user.departmentId)) {
     throw new ApiError(403, "You do not have access to this equipment");
   }
 };
@@ -70,14 +76,22 @@ const normalizeBody = async (body) => {
     if (!Number.isNaN(n) && n > 0) out.expectedUsefulLifeYears = n;
     else delete out.expectedUsefulLifeYears;
   }
-  if (out.departmentId !== undefined) {
-    if (out.departmentId === "" || out.departmentId === null) {
+  const deptInput =
+    out.departmentId !== undefined
+      ? out.departmentId
+      : out.dept !== undefined
+        ? out.dept
+        : out.department;
+  if (deptInput !== undefined) {
+    if (deptInput === "" || deptInput === null) {
       out.departmentId = null;
     } else {
-      const resolved = await resolveDepartmentId(out.departmentId);
-      out.departmentId = resolved || undefined;
+      const resolved = await resolveDepartmentId(deptInput);
+      out.departmentId = resolved || null;
     }
   }
+  delete out.dept;
+  delete out.department;
   delete out._id;
   delete out.createdBy;
   return out;

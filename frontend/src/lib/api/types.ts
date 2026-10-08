@@ -22,6 +22,12 @@ export type ApiDepartment = {
   building?: string;
   floor?: string;
   headName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  description?: string;
+  equipmentCount?: number;
+  assetsCount?: number;
+  staffCount?: number;
   active: boolean;
 };
 

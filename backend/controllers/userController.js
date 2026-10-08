@@ -22,7 +22,9 @@ const loadUser = async (id) => {
 };
 
 const resolveDepartmentId = async (deptRef) => {
+  if (deptRef === null || deptRef === "") return null;
   if (!deptRef) return undefined;
+  if (typeof deptRef === "object" && deptRef?._id) return deptRef._id;
   if (mongoose.Types.ObjectId.isValid(deptRef)) return deptRef;
   const dept = await Department.findOne({
     $or: [{ code: deptRef }, { name: new RegExp(`^${deptRef}$`, "i") }],

@@ -27,6 +27,7 @@ import { Meter, Panel, PanelHead, Pill, Ring } from "@/components/ui/primitives"
 import { activities, departments as fallbackDepartments, radarData } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import { useDepartmentList } from "@/lib/api/useDepartments";
+import { useEquipmentList } from "@/lib/api/useEquipment";
 
 export const Route = createFileRoute("/departments/")({
   head: () => ({
@@ -49,10 +50,11 @@ export const Route = createFileRoute("/departments/")({
 
 function DepartmentWorkspace() {
   const live = useDepartmentList();
+  const liveEquip = useEquipmentList({ limit: 500 });
 
   const deptCards = useMemo(() => {
     if (!live.enabled || !live.items || live.items.length === 0) {
-      return fallbackDepartments;
+      return fallbackDepartments.map((f) => ({ ...f, id: f.name.toLowerCase() }));
     }
     return live.items.map((d, index) => {
       const fallback = fallbackDepartments.find(
@@ -60,18 +62,44 @@ function DepartmentWorkspace() {
           f.name.toLowerCase() === d.name.toLowerCase() ||
           d.name.toLowerCase().includes(f.name.toLowerCase()),
       );
+
+      const liveMappedCount = liveEquip.items
+        ? liveEquip.items.filter((e) => {
+            const eqDept = typeof e.departmentId === "object" ? e.departmentId : null;
+            const eqDeptId = eqDept?._id || (typeof e.departmentId === "string" ? e.departmentId : "");
+            const eqDeptName = eqDept?.name || "";
+            const eqDeptCode = eqDept?.code || "";
+            return (
+              (d._id && eqDeptId === d._id) ||
+              (d.code && (eqDeptId === d.code || eqDeptCode.toLowerCase() === d.code.toLowerCase())) ||
+              (d.name && eqDeptName.toLowerCase() === d.name.toLowerCase())
+            );
+          }).length
+        : undefined;
+
+      const serverCount =
+        (d as { equipmentCount?: number }).equipmentCount ??
+        (d as { assetsCount?: number }).assetsCount;
+
+      const assets =
+        serverCount !== undefined
+          ? serverCount
+          : liveMappedCount !== undefined
+            ? liveMappedCount
+            : (fallback?.assets ?? 0);
+
       return {
         id: d.code || d._id,
         name: d.name,
-        assets: fallback?.assets ?? 300 + index * 40,
+        assets,
         uptime: fallback?.uptime ?? 98.5 + (index % 3) * 0.4,
-        complaints: fallback?.complaints ?? 2 + (index % 5),
-        staff: fallback?.staff ?? 35 + index * 8,
-        score: fallback?.score ?? 90 + (index % 8),
+        complaints: fallback?.complaints ?? 0,
+        staff: fallback?.staff ?? (d.headName ? 1 : 0),
+        score: fallback?.score ?? (assets > 0 ? 95 : 90),
         spend: fallback?.spend ?? 25 + index * 5,
       };
     });
-  }, [live.enabled, live.items]);
+  }, [live.enabled, live.items, liveEquip.items]);
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">

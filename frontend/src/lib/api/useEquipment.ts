@@ -81,7 +81,13 @@ export function useDepartmentLookup() {
       .list()
       .then((list) => {
         if (cancelled) return;
-        setByName(Object.fromEntries(list.map((d) => [d.name, d._id])));
+        const map: Record<string, string> = {};
+        for (const d of list) {
+          if (d.name) map[d.name] = d._id;
+          if (d.code) map[d.code] = d._id;
+          if (d._id) map[d._id] = d._id;
+        }
+        setByName(map);
       })
       .catch(() => undefined);
     return () => {

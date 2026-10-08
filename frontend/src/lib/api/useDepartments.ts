@@ -35,7 +35,16 @@ export function useDepartmentList() {
     };
   }, [nonce]);
 
-  const records: ModuleRecord[] | null = items ? items.map((d) => toDepartmentRecord(d)) : null;
+  const records: ModuleRecord[] | null = items
+    ? items.map((d) =>
+        toDepartmentRecord(
+          d,
+          (d as { equipmentCount?: number }).equipmentCount ??
+            (d as { assetsCount?: number }).assetsCount ??
+            0,
+        ),
+      )
+    : null;
   return { enabled: apiEnabled, items, records, total: items?.length ?? 0, loading, error, reload };
 }
 
@@ -44,6 +53,7 @@ export type DepartmentDetail = {
   equipment: ApiEquipment[];
   complaints: ApiComplaint[];
   maintenance: ApiWorkOrder[];
+  staff: ApiUser[];
 };
 
 export function useDepartmentRecord(id: string) {
@@ -65,10 +75,11 @@ export function useDepartmentRecord(id: string) {
       departmentsApi.equipment(id).catch(() => [] as ApiEquipment[]),
       departmentsApi.complaints(id).catch(() => [] as ApiComplaint[]),
       departmentsApi.maintenance(id).catch(() => [] as ApiWorkOrder[]),
+      departmentsApi.staff(id).catch(() => [] as ApiUser[]),
     ])
-      .then(([dept, equipment, complaints, maintenance]) => {
+      .then(([dept, equipment, complaints, maintenance, staff]) => {
         if (cancelled) return;
-        setDetail({ department: dept, equipment, complaints, maintenance });
+        setDetail({ department: dept, equipment, complaints, maintenance, staff });
       })
       .catch((err) => !cancelled && setError(message(err, "Unable to load department details.")))
       .finally(() => !cancelled && setLoading(false));
@@ -82,7 +93,7 @@ export function useDepartmentRecord(id: string) {
     ? toDepartmentRecord(
         detail.department,
         detail.equipment.length,
-        0,
+        detail.staff.length,
         detail.complaints.filter((c) => c.status !== "CLOSED" && c.status !== "RESOLVED").length,
       )
     : null;

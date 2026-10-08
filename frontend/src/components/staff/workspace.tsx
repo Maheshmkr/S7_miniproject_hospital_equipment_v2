@@ -44,6 +44,7 @@ import { Meter, Panel, PanelHead, Pill, Ring, EmptyState } from "@/components/ui
 import { apiEnabled } from "@/lib/api/client";
 import { analyticsApi, type DashboardAnalytics } from "@/lib/api/analyticsApi";
 import { useEquipmentList, useEquipmentRecord } from "@/lib/api/useEquipment";
+import { useDepartmentRecord } from "@/lib/api/useDepartments";
 import { useAuth } from "@/lib/auth";
 import { useComplaintList } from "@/lib/api/useComplaints";
 import { useMaintenanceList } from "@/lib/api/useMaintenance";
@@ -1297,7 +1298,47 @@ const pieColors = [
 ];
 
 export function StaffDepartmentProfile() {
+  const { user } = useAuth();
+  const deptId = user?.departmentId;
+  const { department: liveDept } = useDepartmentRecord(deptId || "");
+  const { items: liveEquip } = useEquipmentList(apiEnabled ? {} : { limit: 0 });
   const { data: analytics, loading: analyticsLoading } = useStaffDashboardAnalytics();
+
+  const currentDept = useMemo(() => {
+    if (liveDept) {
+      return {
+        name: liveDept.name,
+        code: liveDept.code,
+        head: liveDept.headName || "Clinical In-Charge",
+        headTitle: "Department Head",
+        email: liveDept.contactEmail || "department@medixa.health",
+        phone: liveDept.contactPhone || "+1 (555) 234-5678",
+        extension: "ext. 401",
+        location:
+          [liveDept.building, liveDept.floor].filter(Boolean).join(" · ") || "Main Facility",
+        hours: "24/7 emergency & inpatient",
+        beds: "Clinical Wing",
+        staffCount: liveDept.staffCount ?? 12,
+      };
+    }
+    if (user?.departmentName) {
+      return {
+        ...staffDepartment,
+        name: user.departmentName,
+      };
+    }
+    return staffDepartment;
+  }, [liveDept, user?.departmentName]);
+
+  const chartEquipment = useMemo(() => {
+    if (liveEquip && liveEquip.length > 0) {
+      return liveEquip.map((e) => ({
+        id: e.equipmentId,
+        health: e.healthScore ?? 100,
+      }));
+    }
+    return staffEquipment.map((e) => ({ id: e.id, health: e.health }));
+  }, [liveEquip]);
 
   const stats = useMemo(() => {
     if (!apiEnabled || !analytics) return staffStats;
@@ -1339,8 +1380,8 @@ export function StaffDepartmentProfile() {
       <StaffCrumbs trail={[{ label: "Department profile" }]} />
       <StaffHero
         eyebrow="Department"
-        title={`${staffDepartment.name} · ${staffDepartment.code}`}
-        description={`Led by ${staffDepartment.head} · ${staffDepartment.location} · ${staffDepartment.staffCount} staff across ${staffDepartment.hours}.`}
+        title={`${currentDept.name} · ${currentDept.code}`}
+        description={`Led by ${currentDept.head} · ${currentDept.location} · ${currentDept.staffCount} staff across ${currentDept.hours}.`}
         actions={
           <ActionLink to="/staff/equipment" variant="primary" icon={<Cpu className="size-4" />}>
             Department equipment
@@ -1388,20 +1429,20 @@ export function StaffDepartmentProfile() {
             icon={<Building2 className="size-4" />}
           />
           <dl className="px-6 pb-6 sm:px-7">
-            <DefRow label="Department name" value={staffDepartment.name} />
-            <DefRow label="Department code" value={staffDepartment.code} />
+            <DefRow label="Department name" value={currentDept.name} />
+            <DefRow label="Department code" value={currentDept.code} />
             <DefRow
               label="Department head"
-              value={`${staffDepartment.head} · ${staffDepartment.headTitle}`}
+              value={`${currentDept.head} · ${currentDept.headTitle}`}
             />
-            <DefRow label="Email" value={staffDepartment.email} />
+            <DefRow label="Email" value={currentDept.email} />
             <DefRow
               label="Phone"
-              value={`${staffDepartment.phone} · ${staffDepartment.extension}`}
+              value={`${currentDept.phone} · ${currentDept.extension}`}
             />
-            <DefRow label="Location" value={staffDepartment.location} />
-            <DefRow label="Operating hours" value={staffDepartment.hours} />
-            <DefRow label="Capacity" value={staffDepartment.beds} />
+            <DefRow label="Location" value={currentDept.location} />
+            <DefRow label="Operating hours" value={currentDept.hours} />
+            <DefRow label="Capacity" value={currentDept.beds} />
           </dl>
         </Panel>
 
@@ -1413,7 +1454,7 @@ export function StaffDepartmentProfile() {
           />
           <div className="h-[280px] px-2 pb-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={staffEquipment.map((e) => ({ name: e.id, health: e.health }))}>
+              <BarChart data={chartEquipment.map((e) => ({ name: e.id, health: e.health }))}>
                 <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="name"
@@ -1432,7 +1473,7 @@ export function StaffDepartmentProfile() {
                 />
                 <Tooltip {...chartTip} cursor={{ fill: "var(--surface-muted)" }} />
                 <Bar dataKey="health" radius={[6, 6, 0, 0]} maxBarSize={26}>
-                  {staffEquipment.map((e) => (
+                  {chartEquipment.map((e) => (
                     <Cell
                       key={e.id}
                       fill={
