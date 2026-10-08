@@ -3,6 +3,9 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "allowScripts": {
+    "core-js": true
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
