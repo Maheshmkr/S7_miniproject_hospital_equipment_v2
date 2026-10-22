@@ -616,7 +616,7 @@ function Analytics() {
           </Panel>
 
           {/* Insights Panel */}
-          <Panel className="lg:col-span-2 relative">
+          {/* <Panel className="lg:col-span-2 relative">
             <div className="absolute inset-x-0 top-0 h-28 gradient-mesh opacity-70" />
             <div className="relative">
               <PanelHead
@@ -654,10 +654,10 @@ function Analytics() {
                 ))}
               </div>
             </div>
-          </Panel>
+          </Panel> */}
 
           {/* Export Panel (Respecting Active Filters!) */}
-          <Panel>
+          {/* <Panel>
             <PanelHead
               title="Export"
               subtitle={`Board reporting pack (${dateRangeLabel})`}
@@ -703,10 +703,10 @@ function Analytics() {
                 </button>
               ))}
             </div>
-          </Panel>
+          </Panel> */}
 
           {/* Category Performance Matrix */}
-          <Panel className="lg:col-span-3">
+          {/* <Panel className="lg:col-span-3">
             <PanelHead
               title="Category performance matrix"
               subtitle={`Volume, health and cost contribution (${dateRangeLabel})`}
@@ -728,7 +728,7 @@ function Analytics() {
                 </div>
               ))}
             </div>
-          </Panel>
+          </Panel> */}
         </div>
       )}
     </div>

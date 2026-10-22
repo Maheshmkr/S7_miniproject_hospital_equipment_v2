@@ -806,7 +806,7 @@ function EquipmentDetail() {
         </div>
 
         <div className="space-y-6">
-          <Panel className="relative">
+          {/* <Panel className="relative">
             <div className="absolute inset-x-0 top-0 h-28 gradient-mesh opacity-70" />
             <div className="relative">
               <PanelHead
@@ -854,7 +854,7 @@ function EquipmentDetail() {
                 </button>
               </div>
             </div>
-          </Panel>
+          </Panel> */}
 
           <Panel>
             <PanelHead title="Warranty & AMC" icon={<ShieldCheck className="size-4" />} />
