@@ -8,6 +8,7 @@ import {
   Clock,
   Cpu,
   Download,
+  FileSpreadsheet,
   FileText,
   Filter,
   Globe,
@@ -48,6 +49,7 @@ import { serviceReportsApi } from "@/lib/api/serviceReportsApi";
 import { useAuth } from "@/lib/auth";
 import { useNotifications } from "@/lib/api/useNotifications";
 import { usePdfExport } from "@/lib/exportPdf";
+import { exportToCsv } from "@/lib/exportCsv";
 import { cn } from "@/lib/utils";
 
 /* ============================== Service reports ============================== */
@@ -141,6 +143,29 @@ export function ServiceReportsList() {
     [displayReports, query, type],
   );
 
+  const onExportCsv = () => {
+    exportToCsv({
+      filename: "Medixa-Service-Reports.csv",
+      title: "Department Service Reports",
+      metadata: {
+        "Filter Type": type,
+        "Search Query": query || "None",
+        "Filtered Records": String(rows.length),
+        "Total Available": String(displayReports.length),
+      },
+      columns: [
+        { header: "Report ID", key: "id" },
+        { header: "Equipment", key: "equipmentName" },
+        { header: "Type", key: "type" },
+        { header: "Engineer", key: "engineer" },
+        { header: "Completed Date", key: "completed" },
+        { header: "Outcome", key: "outcome" },
+        { header: "Summary", key: "summary" },
+      ],
+      data: rows,
+    });
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <StaffCrumbs trail={[{ label: "Service reports" }]} />
@@ -149,13 +174,22 @@ export function ServiceReportsList() {
         title="Service reports"
         description="Signed reports issued after every completed intervention on your department's equipment."
         actions={
-          <ActionLink
-            to="/staff/maintenance"
-            variant="primary"
-            icon={<Wrench className="size-4" />}
-          >
-            Maintenance status
-          </ActionLink>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onExportCsv}
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] font-semibold text-foreground shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-soft"
+            >
+              <FileSpreadsheet className="size-4 text-primary" /> Export CSV ({rows.length})
+            </button>
+            <ActionLink
+              to="/staff/maintenance"
+              variant="primary"
+              icon={<Wrench className="size-4" />}
+            >
+              Maintenance status
+            </ActionLink>
+          </div>
         }
       />
       <StaffTabs active="reports" />
@@ -163,28 +197,28 @@ export function ServiceReportsList() {
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total reports"
-          value={displayReports.length}
-          hint="Available to download"
+          value={rows.length}
+          hint={rows.length === displayReports.length ? "Available to download" : `Filtered of ${displayReports.length}`}
           tone="primary"
           icon={<FileText className="size-4" />}
         />
         <StatCard
           label="Corrective"
-          value={displayReports.filter((r) => r.type === "Corrective").length}
+          value={rows.filter((r) => r.type === "Corrective").length}
           hint="Breakdown repairs"
           tone="warning"
           icon={<Wrench className="size-4" />}
         />
         <StatCard
           label="Preventive"
-          value={displayReports.filter((r) => r.type === "Preventive").length}
+          value={rows.filter((r) => r.type === "Preventive").length}
           hint="Planned servicing"
           tone="success"
           icon={<CheckCircle2 className="size-4" />}
         />
         <StatCard
           label="Calibration"
-          value={displayReports.filter((r) => r.type === "Calibration").length}
+          value={rows.filter((r) => r.type === "Calibration").length}
           hint="Certificates issued"
           tone="violet"
           icon={<ShieldCheck className="size-4" />}
@@ -194,7 +228,7 @@ export function ServiceReportsList() {
       <Panel>
         <PanelHead
           title="All service reports"
-          subtitle={`${rows.length} of ${displayReports.length} shown`}
+          subtitle={`${rows.length} of ${displayReports.length} matching active filters`}
           icon={<Filter className="size-4" />}
         />
         <div className="grid gap-3 px-6 pb-5 sm:px-7 md:grid-cols-[minmax(0,1fr)_auto]">

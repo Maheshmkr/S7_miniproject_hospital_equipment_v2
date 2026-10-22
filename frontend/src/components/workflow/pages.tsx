@@ -25,6 +25,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  FileSpreadsheet,
   Filter,
   History,
   LayoutGrid,
@@ -58,6 +59,18 @@ import { useVendorList } from "@/lib/api/useVendors";
 import { useDepartmentList } from "@/lib/api/useDepartments";
 import { useUserList } from "@/lib/api/useUsers";
 import { usePdfExport, generateReportFilename } from "@/lib/exportPdf";
+import { exportToCsv } from "@/lib/exportCsv";
+import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
+import {
+  AnalyticsFilterBar,
+  EmptyFilterState,
+} from "@/components/analytics/AnalyticsFilterBar";
+import {
+  filterModuleRecords,
+  recalculateModuleStats,
+  recalculateBreakdown,
+  filterTrendData,
+} from "@/lib/analyticsFilterEngine";
 import { cn } from "@/lib/utils";
 import {
   findRecord,
@@ -1308,6 +1321,19 @@ export function ModuleHistory({ moduleKey, id }: { moduleKey: ModuleKey; id: str
 export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
   const m = getModule(moduleKey);
 
+  const {
+    filters,
+    apiFilter,
+    dateRangeLabel,
+    activeFilterCount,
+    activePills,
+    exportMetadata,
+    updateFilter,
+    setDatePreset,
+    clearAll,
+    removeFilter,
+  } = useAnalyticsFilters("all");
+
   // Call register list hooks to fetch live records for comparative charts and top performers
   const eqList = useEquipmentList({ limit: 100 });
   const compList = useComplaintList({ limit: 100 });
@@ -1333,35 +1359,184 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
     return null;
   })();
 
-  const activeRecords = apiEnabled && liveRecords ? liveRecords : m.records;
-  const activeTop = [...activeRecords].sort((a, b) => b.score - a.score).slice(0, 5);
+  const baseRecords = apiEnabled && liveRecords ? liveRecords : m.records;
 
-  // Fetch live stats & distribution breakdowns
-  const { mappedData, loading } = useModuleAnalytics(moduleKey);
-  const activeStats = apiEnabled && mappedData?.stats ? mappedData.stats : m.stats;
-  const activeBreakdown = apiEnabled && mappedData?.breakdown ? mappedData.breakdown : m.breakdown;
+  // Filter records based on active filters
+  const filteredRecords = useMemo(() => {
+    return filterModuleRecords(baseRecords, filters);
+  }, [baseRecords, filters]);
+
+  const activeTop = useMemo(() => {
+    return [...filteredRecords].sort((a, b) => b.score - a.score).slice(0, 5);
+  }, [filteredRecords]);
+
+  // Fetch live stats & distribution breakdowns with active filters
+  const { mappedData, loading } = useModuleAnalytics(moduleKey, apiFilter);
+
+  // Dynamically update stats & breakdowns
+  const activeStats = useMemo(() => {
+    if (activeFilterCount === 0 && apiEnabled && mappedData?.stats) {
+      return mappedData.stats;
+    }
+    return recalculateModuleStats(moduleKey, filteredRecords, mappedData?.stats || m.stats);
+  }, [activeFilterCount, mappedData, filteredRecords, moduleKey, m.stats]);
+
+  const activeBreakdown = useMemo(() => {
+    if (activeFilterCount === 0 && apiEnabled && mappedData?.breakdown) {
+      return mappedData.breakdown;
+    }
+    return recalculateBreakdown(filteredRecords, mappedData?.breakdown || m.breakdown);
+  }, [activeFilterCount, mappedData, filteredRecords, m.breakdown]);
+
+  const activeTrend = useMemo(() => {
+    return filterTrendData(m.trend, filters);
+  }, [m.trend, filters]);
+
+  // Department options for filter bar
+  const departmentOptions = useMemo(() => {
+    if (deptList.items && deptList.items.length > 0) {
+      return deptList.items.map((d) => ({ id: d.departmentId || d._id, name: d.name }));
+    }
+    return undefined;
+  }, [deptList.items]);
+
+  // Statuses from dataset
+  const availableStatuses = useMemo(() => {
+    return Array.from(new Set(baseRecords.map((r) => r.status))).filter(Boolean);
+  }, [baseRecords]);
 
   const { exporting, handleExport } = usePdfExport();
 
+  // Export PDF respecting active filters
   const onExport = () => {
     const filename = generateReportFilename(`${m.label}-Analytics`);
     void handleExport({
       filename,
       title: `${m.label} Analytics Report`,
-      subtitle: `Performance, distribution and trend intelligence for ${m.label.toLowerCase()}`,
+      subtitle: `Performance, distribution and trend intelligence for ${m.label.toLowerCase()} (${dateRangeLabel})`,
       metadata: {
         Module: m.label,
         "Report Type": "Analytics & Distribution",
+        ...exportMetadata,
+        "Filtered Records": String(filteredRecords.length),
+        "Total Fleet Scope": String(baseRecords.length),
       },
     });
   };
+
+  // Export CSV of currently filtered dataset
+  const onExportCsv = () => {
+    const filename = generateReportFilename(`${m.label}-Analytics-Data`).replace(/\.pdf$/, ".csv");
+    exportToCsv({
+      filename,
+      title: `${m.label} Filtered Analytics Data`,
+      metadata: exportMetadata,
+      columns: [
+        { header: "Record ID", key: "id" },
+        { header: "Title", key: "title" },
+        { header: "Details", key: "subtitle" },
+        { header: "Status", key: "status" },
+        { header: "Performance Score", key: "score" },
+        {
+          header: "Department",
+          accessor: (row) =>
+            row.values?.department ||
+            row.values?.dept ||
+            row.cells?.[0] ||
+            row.subtitle,
+        },
+      ],
+      data: filteredRecords,
+    });
+  };
+
+  // Determine which filters are relevant for this module
+  const filterToggles = useMemo(() => {
+    switch (moduleKey) {
+      case "equipment":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showStatus: true,
+          showCategory: true,
+          showCriticality: true,
+        };
+      case "maintenance":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showStatus: true,
+          showMaintenanceType: true,
+          showPriority: true,
+          showEngineer: true,
+        };
+      case "complaints":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showStatus: true,
+          showCategory: true,
+          showPriority: true,
+          showEngineer: true,
+        };
+      case "departments":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showStatus: true,
+        };
+      case "warranty":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showStatus: true,
+          showCategory: true,
+          showVendor: true,
+        };
+      case "vendors":
+        return {
+          showDateRange: true,
+          showCategory: true,
+          showStatus: true,
+          showVendor: true,
+        };
+      case "inventory":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showCategory: true,
+          showStatus: true,
+        };
+      case "purchase-orders":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showStatus: true,
+          showVendor: true,
+        };
+      case "users":
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showRole: true,
+          showStatus: true,
+        };
+      default:
+        return {
+          showDateRange: true,
+          showDepartment: true,
+          showStatus: true,
+          showCategory: true,
+        };
+    }
+  }, [moduleKey]);
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
       <PageHeader
         eyebrow={m.eyebrow}
         title={`${m.label} analytics`}
-        description={`Performance, distribution and trend intelligence for ${m.label.toLowerCase()}.`}
+        description={`Performance, distribution and trend intelligence for ${m.label.toLowerCase()} scoped to ${dateRangeLabel.toLowerCase()}.`}
         actions={
           <>
             <ActionButton
@@ -1370,7 +1545,10 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
               disabled={exporting}
               onClick={onExport}
             >
-              {exporting ? "Exporting..." : "Export report"}
+              {exporting ? "Exporting..." : "Export report (PDF)"}
+            </ActionButton>
+            <ActionButton variant="ghost" icon={FileSpreadsheet} onClick={onExportCsv}>
+              Export data (CSV)
             </ActionButton>
             <ActionButton to={`${m.base}/list` as never} icon={ListFilter}>
               Open register
@@ -1379,172 +1557,205 @@ export function ModuleAnalytics({ moduleKey }: { moduleKey: ModuleKey }) {
         }
       />
       <WorkflowTabs moduleKey={moduleKey} active="analytics" />
+
+      {/* Reusable Analytics Filter Bar */}
+      <AnalyticsFilterBar
+        filters={filters}
+        dateRangeLabel={dateRangeLabel}
+        activeFilterCount={activeFilterCount}
+        activePills={activePills}
+        onFilterChange={updateFilter}
+        onDatePresetChange={setDatePreset}
+        onClearAll={clearAll}
+        onRemoveFilter={removeFilter}
+        {...filterToggles}
+        departments={departmentOptions}
+        statuses={availableStatuses}
+        totalCount={baseRecords.length}
+        filteredCount={filteredRecords.length}
+      />
+
+      {/* KPI Stat Cards */}
       <StatCards moduleKey={moduleKey} stats={activeStats} />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Panel className="lg:col-span-2">
-          <PanelHead
-            title="Trend analysis"
-            subtitle={`${m.seriesA} vs ${m.seriesB}`}
-            icon={<TrendingUp className="size-4" />}
-          />
-          <div className="h-[280px] px-2 pb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={m.trend} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="anaA" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.32} />
-                    <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="anaB" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--chart-4)" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="var(--chart-4)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="month"
-                  tickLine={false}
-                  axisLine={false}
-                  fontSize={11}
-                  stroke="var(--muted-foreground)"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  fontSize={11}
-                  width={34}
-                  stroke="var(--muted-foreground)"
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: 14,
-                    fontSize: 12,
-                    border: "1px solid var(--border)",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area
-                  type="monotone"
-                  dataKey="a"
-                  name={m.seriesA}
-                  stroke="var(--chart-1)"
-                  strokeWidth={2.5}
-                  fill="url(#anaA)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="b"
-                  name={m.seriesB}
-                  stroke="var(--chart-4)"
-                  strokeWidth={2.5}
-                  fill="url(#anaB)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </Panel>
+      {/* Content or Empty State */}
+      {filteredRecords.length === 0 ? (
+        <EmptyFilterState
+          title={`No ${m.label.toLowerCase()} records match the active filters`}
+          description="Try broadening the selected date range, changing department, or clearing specific filters."
+          onClear={clearAll}
+        />
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Panel className="lg:col-span-2">
+            <PanelHead
+              title="Trend analysis"
+              subtitle={`${m.seriesA} vs ${m.seriesB} (${dateRangeLabel})`}
+              icon={<TrendingUp className="size-4" />}
+            />
+            <div className="h-[280px] px-2 pb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={activeTrend} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="anaA" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.32} />
+                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="anaB" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-4)" stopOpacity={0.28} />
+                      <stop offset="100%" stopColor="var(--chart-4)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
+                  <XAxis
+                    dataKey="month"
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                    stroke="var(--muted-foreground)"
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                    width={34}
+                    stroke="var(--muted-foreground)"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 14,
+                      fontSize: 12,
+                      border: "1px solid var(--border)",
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Area
+                    type="monotone"
+                    dataKey="a"
+                    name={m.seriesA}
+                    stroke="var(--chart-1)"
+                    strokeWidth={2.5}
+                    fill="url(#anaA)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="b"
+                    name={m.seriesB}
+                    stroke="var(--chart-4)"
+                    strokeWidth={2.5}
+                    fill="url(#anaB)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
 
-        <Panel>
-          <PanelHead
-            title="Distribution"
-            subtitle="Composition of the portfolio"
-            icon={<ChartPie className="size-4" />}
-          />
-          <div className="h-[260px] px-2 pb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={activeBreakdown}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={52}
-                  outerRadius={82}
-                  paddingAngle={3}
+          <Panel>
+            <PanelHead
+              title="Distribution"
+              subtitle="Composition of filtered records"
+              icon={<ChartPie className="size-4" />}
+            />
+            <div className="h-[260px] px-2 pb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={activeBreakdown}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={52}
+                    outerRadius={82}
+                    paddingAngle={3}
+                  >
+                    {activeBreakdown.map((_, i) => (
+                      <Cell key={i} fill={chartColors[i % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 14,
+                      fontSize: 12,
+                      border: "1px solid var(--border)",
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+
+          <Panel className="lg:col-span-2">
+            <PanelHead
+              title="Comparative performance"
+              subtitle={`Score by record (${filteredRecords.length} records)`}
+              icon={<ChartPie className="size-4" />}
+            />
+            <div className="h-[260px] px-2 pb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={filteredRecords.slice(0, 15).map((r) => ({ name: r.id, score: r.score }))}
+                  barGap={6}
                 >
-                  {m.breakdown.map((_, i) => (
-                    <Cell key={i} fill={chartColors[i % chartColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: 14,
-                    fontSize: 12,
-                    border: "1px solid var(--border)",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </Panel>
+                  <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
+                  <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={10.5}
+                    stroke="var(--muted-foreground)"
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    fontSize={11}
+                    width={34}
+                    stroke="var(--muted-foreground)"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 14,
+                      fontSize: 12,
+                      border: "1px solid var(--border)",
+                    }}
+                    cursor={{ fill: "var(--surface-muted)" }}
+                  />
+                  <Bar
+                    dataKey="score"
+                    fill="var(--chart-1)"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={26}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
 
-        <Panel className="lg:col-span-2">
-          <PanelHead
-            title="Comparative performance"
-            subtitle="Score by record"
-            icon={<ChartPie className="size-4" />}
-          />
-          <div className="h-[260px] px-2 pb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={activeRecords.map((r) => ({ name: r.id, score: r.score }))}
-                barGap={6}
-              >
-                <CartesianGrid strokeDasharray="4 6" vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="name"
-                  tickLine={false}
-                  axisLine={false}
-                  fontSize={10.5}
-                  stroke="var(--muted-foreground)"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  fontSize={11}
-                  width={34}
-                  stroke="var(--muted-foreground)"
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: 14,
-                    fontSize: 12,
-                    border: "1px solid var(--border)",
-                  }}
-                  cursor={{ fill: "var(--surface-muted)" }}
-                />
-                <Bar dataKey="score" fill="var(--chart-1)" radius={[6, 6, 0, 0]} maxBarSize={26} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Panel>
-
-        <Panel>
-          <PanelHead
-            title="Top performers"
-            subtitle="Highest scoring records"
-            icon={<TrendingUp className="size-4" />}
-          />
-          <div className="space-y-2 px-6 pb-6">
-            {activeTop.map((r) => (
-              <Link
-                key={r.id}
-                to={`${m.base}/${r.id}` as never}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3 transition-all hover:-translate-y-0.5 hover:shadow-soft"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-[12.5px] font-semibold">{r.title}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {r.subtitle}
+          <Panel>
+            <PanelHead
+              title="Top performers"
+              subtitle="Highest scoring filtered records"
+              icon={<TrendingUp className="size-4" />}
+            />
+            <div className="space-y-2 px-6 pb-6">
+              {activeTop.map((r) => (
+                <Link
+                  key={r.id}
+                  to={`${m.base}/${r.id}` as never}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3 transition-all hover:-translate-y-0.5 hover:shadow-soft"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12.5px] font-semibold">{r.title}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {r.subtitle}
+                    </span>
                   </span>
-                </span>
-                <Pill tone={r.tone}>{r.score}</Pill>
-              </Link>
-            ))}
-          </div>
-        </Panel>
-      </div>
+                  <Pill tone={r.tone}>{r.score}</Pill>
+                </Link>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }

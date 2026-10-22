@@ -412,14 +412,26 @@ export async function exportPageToPdf(options: ExportPdfOptions = {}): Promise<v
         align: "right",
       });
 
-      // Show first 2 metadata items on page 1 header if provided
+      // Show active filter metadata items on page 1 header if provided
       if (i === 0 && Object.keys(metadata).length > 0) {
-        const metaEntries = Object.entries(metadata)
-          .filter(([_, v]) => v !== undefined && v !== null && v !== "")
-          .slice(0, 3);
-        const metaStr = metaEntries.map(([k, v]) => `${k}: ${v}`).join("  |  ");
-        if (metaStr) {
-          doc.text(metaStr, pageWidth - margins.right, 16, { align: "right" });
+        const metaEntries = Object.entries(metadata).filter(
+          ([_, v]) => v !== undefined && v !== null && v !== "",
+        );
+        const line1 = metaEntries
+          .slice(0, 3)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("  |  ");
+        if (line1) {
+          doc.text(line1, pageWidth - margins.right, 15.5, { align: "right" });
+        }
+        if (metaEntries.length > 3) {
+          const line2 = metaEntries
+            .slice(3, 7)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("  |  ");
+          if (line2) {
+            doc.text(line2, pageWidth - margins.right, 19.5, { align: "right" });
+          }
         }
       }
 

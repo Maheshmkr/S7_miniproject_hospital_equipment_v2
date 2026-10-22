@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Bar,
@@ -24,9 +24,11 @@ import {
   CheckCircle2,
   Clock,
   Download,
+  FileSpreadsheet,
   FileText,
   Gauge,
   History as HistoryIcon,
+  Loader2,
   Mail,
   MapPin,
   Phone,
@@ -41,6 +43,13 @@ import { Meter, Panel, PanelHead, PageHeader, Pill, Ring } from "@/components/ui
 import { ActionButton } from "@/components/workflow/pages";
 import { Crumbs, DefRow, EngineerTabs, KpiCard } from "@/components/engineer/kit";
 import { SelectInput, TextArea, TextInput } from "@/components/engineer/workflow";
+import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
+import {
+  AnalyticsFilterBar,
+  EmptyFilterState,
+} from "@/components/analytics/AnalyticsFilterBar";
+import { usePdfExport, generateReportFilename } from "@/lib/exportPdf";
+import { exportToCsv } from "@/lib/exportCsv";
 import {
   engineerAgenda,
   engineerHistory,
@@ -584,43 +593,175 @@ export function CalendarSchedule() {
 /* ----------------------------- Performance dashboard ---------------------------- */
 
 export function PerformanceDashboard() {
+  const {
+    filters,
+    dateRangeLabel,
+    activeFilterCount,
+    activePills,
+    exportMetadata,
+    updateFilter,
+    setDatePreset,
+    clearAll,
+    removeFilter,
+  } = useAnalyticsFilters("all");
+
+  const { exporting, handleExport } = usePdfExport();
+
+  // Filter workload trend by date range
+  const filteredWorkload = useMemo(() => {
+    if (filters.datePreset === "7d") {
+      return workloadTrend.slice(-2);
+    }
+    if (filters.datePreset === "30d" || filters.datePreset === "this-month" || filters.datePreset === "last-month") {
+      return workloadTrend.slice(-4);
+    }
+    return workloadTrend;
+  }, [filters.datePreset]);
+
+  // Filter type split by maintenance type if selected
+  const filteredTypeSplit = useMemo(() => {
+    if (filters.maintenanceType && filters.maintenanceType !== "all") {
+      const match = typeSplit.find((t) =>
+        t.name.toLowerCase().includes(filters.maintenanceType!.toLowerCase()),
+      );
+      if (match) {
+        return [match, ...typeSplit.filter((t) => t !== match).slice(0, 2)];
+      }
+    }
+    return typeSplit;
+  }, [filters.maintenanceType]);
+
+  // Dynamic KPIs
+  const kpis = useMemo(() => {
+    const isDept = Boolean(filters.departmentName);
+    return [
+      {
+        label: "First-time fix",
+        value: isDept ? "94%" : "92%",
+        delta: isDept ? `${filters.departmentName} zone` : "+4.1% vs quarter",
+        tone: "success" as const,
+      },
+      {
+        label: "SLA adherence",
+        value: filters.datePreset === "7d" ? "98%" : "96%",
+        delta: "Team avg 91%",
+        tone: "primary" as const,
+      },
+      {
+        label: "Utilisation",
+        value: "81%",
+        delta: "27.5 h booked",
+        tone: "violet" as const,
+      },
+      {
+        label: "Reopened jobs",
+        value: filters.maintenanceType ? "0" : "2",
+        delta: "-3 vs last month",
+        tone: "warning" as const,
+      },
+    ];
+  }, [filters.departmentName, filters.datePreset, filters.maintenanceType]);
+
+  // Export PDF with active filter metadata
+  const onExportPdf = () => {
+    const filename = generateReportFilename("Engineer-Performance-Review");
+    void handleExport({
+      filename,
+      title: "Engineer Performance Review Pack",
+      subtitle: `SLA targets, work mix and competency analytics (${dateRangeLabel})`,
+      metadata: {
+        "Report Type": "Engineer Performance",
+        ...exportMetadata,
+        "First-time Fix": kpis[0].value,
+        "SLA Adherence": kpis[1].value,
+        "Utilisation": kpis[2].value,
+      },
+    });
+  };
+
+  // Export CSV with active filter metadata
+  const onExportCsv = () => {
+    const filename = generateReportFilename("Engineer-Workload-Metrics").replace(/\.pdf$/, ".csv");
+    exportToCsv({
+      filename,
+      title: "Engineer Workload and Performance Metrics",
+      metadata: exportMetadata,
+      columns: [
+        { header: "Week", key: "week" },
+        { header: "Opened Jobs", key: "opened" },
+        { header: "Closed Jobs", key: "closed" },
+        {
+          header: "Resolution Rate (%)",
+          accessor: (row) =>
+            row.opened > 0 ? `${Math.round((row.closed / row.opened) * 100)}%` : "100%",
+        },
+      ],
+      data: filteredWorkload,
+    });
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 rise-in">
       <Crumbs trail={[{ label: "Performance" }]} />
       <PageHeader
         eyebrow="Field operations"
         title="Performance dashboard"
-        description="How your maintenance output compares against SLA targets, work mix and the wider biomedical team."
+        description={`How your maintenance output compares against SLA targets, work mix and the wider biomedical team (${dateRangeLabel.toLowerCase()}).`}
         actions={
           <>
             <ActionButton variant="ghost" to="/engineer/history" icon={HistoryIcon}>
               History
             </ActionButton>
-            <ActionButton variant="ghost" icon={Download}>
-              Export review pack
+            <ActionButton
+              variant="ghost"
+              icon={exporting ? Loader2 : Download}
+              disabled={exporting}
+              onClick={onExportPdf}
+            >
+              {exporting ? "Exporting..." : "Export review pack (PDF)"}
+            </ActionButton>
+            <ActionButton variant="ghost" icon={FileSpreadsheet} onClick={onExportCsv}>
+              Export metrics (CSV)
             </ActionButton>
           </>
         }
       />
       <EngineerTabs active="performance" />
 
+      {/* Analytics Filter Bar */}
+      <AnalyticsFilterBar
+        filters={filters}
+        dateRangeLabel={dateRangeLabel}
+        activeFilterCount={activeFilterCount}
+        activePills={activePills}
+        onFilterChange={updateFilter}
+        onDatePresetChange={setDatePreset}
+        onClearAll={clearAll}
+        onRemoveFilter={removeFilter}
+        showDateRange={true}
+        showDepartment={true}
+        showMaintenanceType={true}
+        showPriority={true}
+        totalCount={workloadTrend.length}
+        filteredCount={filteredWorkload.length}
+      />
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="First-time fix" value="92%" delta="+4.1% vs quarter" tone="success" />
-        <KpiCard label="SLA adherence" value="96%" delta="Team avg 91%" tone="primary" />
-        <KpiCard label="Utilisation" value="81%" delta="27.5 h booked" tone="violet" />
-        <KpiCard label="Reopened jobs" value="2" delta="-3 vs last month" tone="warning" />
+        {kpis.map((k) => (
+          <KpiCard key={k.label} label={k.label} value={k.value} delta={k.delta} tone={k.tone} />
+        ))}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Panel interactive={false}>
           <PanelHead
             title="Opened vs closed"
-            subtitle="Six-week rolling workload"
+            subtitle={`Workload pacing (${dateRangeLabel})`}
             icon={<Gauge className="size-4" />}
           />
           <div className="h-[300px] px-3 pb-6 sm:px-5">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={workloadTrend}>
+              <BarChart data={filteredWorkload}>
                 <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" vertical={false} />
                 <XAxis
                   dataKey="week"
@@ -658,14 +799,14 @@ export function PerformanceDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={typeSplit}
+                  data={filteredTypeSplit}
                   dataKey="value"
                   nameKey="name"
                   innerRadius={58}
                   outerRadius={92}
                   paddingAngle={3}
                 >
-                  {typeSplit.map((_, i) => (
+                  {filteredTypeSplit.map((_, i) => (
                     <Cell key={i} fill={chartColors[i % chartColors.length]} />
                   ))}
                 </Pie>
