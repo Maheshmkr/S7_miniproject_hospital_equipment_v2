@@ -664,7 +664,7 @@ function EquipmentDetail() {
             </Panel>
 
             <div className="space-y-6">
-              <Panel>
+              {/* <Panel>
                 <div className="flex items-center gap-5 p-7">
                   <div className="grid size-24 shrink-0 place-items-center rounded-2xl border border-border bg-surface-muted">
                     <QrCode className="size-14 text-foreground" strokeWidth={1.2} />
@@ -679,7 +679,7 @@ function EquipmentDetail() {
                     </button>
                   </div>
                 </div>
-              </Panel>
+              </Panel> */}
               <Panel>
                 <PanelHead title="Vendor & department" icon={<Truck className="size-4" />} />
                 <div className="space-y-3 px-6 pb-6">
@@ -884,7 +884,7 @@ function EquipmentDetail() {
             </div>
           </Panel>
 
-          <Panel>
+          {/* <Panel>
             <PanelHead
               title="Attachments"
               subtitle="6 documents"
@@ -907,7 +907,7 @@ function EquipmentDetail() {
                 </li>
               ))}
             </ul>
-          </Panel>
+          </Panel> */}
 
           <Panel>
             <PanelHead title="Related equipment" icon={<Wrench className="size-4" />} />
