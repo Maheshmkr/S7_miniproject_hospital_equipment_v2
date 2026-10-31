@@ -8,13 +8,13 @@ export const Route = createFileRoute("/staff/complaints/new")({
       {
         name: "description",
         content:
-          "Report an equipment issue in four guided steps with photos, symptoms and preferred visit.",
+          "Report an equipment issue in four guided steps with symptoms and preferred visit.",
       },
       { property: "og:title", content: "Register Complaint — Medixa" },
       {
         property: "og:description",
         content:
-          "Report an equipment issue in four guided steps with photos, symptoms and preferred visit.",
+          "Report an equipment issue in four guided steps with symptoms and preferred visit.",
       },
     ],
   }),

@@ -92,8 +92,8 @@ export function RegisterComplaint() {
     priority: "High" as StaffComplaint["priority"],
     description: "",
     symptoms: [] as string[],
-    photos: ["fault-photo-1.jpg"],
-    documents: ["error-log.txt"],
+    photos: [] as string[],
+    documents: [] as string[],
     visit: "",
     contactName: staffProfile.name,
     contactNumber: staffProfile.phone,
@@ -252,7 +252,7 @@ export function RegisterComplaint() {
       <StaffHero
         eyebrow="Complaints"
         title="Register an equipment complaint"
-        description="Four quick steps. Give us as much detail as you can — clear symptoms and photos help engineers arrive prepared."
+        description="Four quick steps. Give us as much detail as you can — clear symptoms and description help engineers arrive prepared."
       />
 
       <Panel>
@@ -401,55 +401,7 @@ export function RegisterComplaint() {
                   ))}
                 </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-dashed border-border-strong p-6 text-center">
-                  <Camera className="mx-auto size-6 text-muted-foreground" />
-                  <p className="mt-2 text-[13px] font-semibold">Upload photos</p>
-                  <p className="mt-1 text-[11.5px] text-muted-foreground">
-                    JPG or PNG up to 10 MB each
-                  </p>
-                  <div className="mt-3 flex flex-wrap justify-center gap-2">
-                    {form.photos.map((p) => (
-                      <Pill key={p} tone="primary">
-                        {p}
-                      </Pill>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex justify-center">
-                    <ActionButton
-                      onClick={() =>
-                        set("photos", [...form.photos, `fault-photo-${form.photos.length + 1}.jpg`])
-                      }
-                    >
-                      Add photo
-                    </ActionButton>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-dashed border-border-strong p-6 text-center">
-                  <Paperclip className="mx-auto size-6 text-muted-foreground" />
-                  <p className="mt-2 text-[13px] font-semibold">Upload documents</p>
-                  <p className="mt-1 text-[11.5px] text-muted-foreground">
-                    Logs, PDFs or exported reports
-                  </p>
-                  <div className="mt-3 flex flex-wrap justify-center gap-2">
-                    {form.documents.map((d) => (
-                      <Pill key={d}>{d}</Pill>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex justify-center">
-                    <ActionButton
-                      onClick={() =>
-                        set("documents", [
-                          ...form.documents,
-                          `attachment-${form.documents.length + 1}.pdf`,
-                        ])
-                      }
-                    >
-                      Add document
-                    </ActionButton>
-                  </div>
-                </div>
-              </div>
+
             </div>
           )}
 
@@ -531,8 +483,7 @@ export function RegisterComplaint() {
                       )
                     }
                   />
-                  <DefRow label="Photos" value={`${form.photos.length} attached`} />
-                  <DefRow label="Documents" value={`${form.documents.length} attached`} />
+
                   <DefRow label="Preferred visit" value={form.visit || "Next available slot"} />
                   <DefRow label="Contact" value={`${form.contactName} · ${form.contactNumber}`} />
                 </dl>
